@@ -1,0 +1,20 @@
+#!/bin/sh
+# S00mounts — mount virtual filesystems before all other init scripts
+#
+# BusyBox init does NOT auto-mount /proc or /sys.
+# Without these, udev, lsblk, ip, and sysctl all fail silently.
+# This script must run first (S00) to unblock everything else.
+
+case "$1" in
+  start)
+    mount -t proc proc /proc
+    mount -t sysfs sysfs /sys
+    mount -a
+    ;;
+  stop)
+    ;;
+  *)
+    echo "Usage: $0 {start|stop}"
+    exit 1
+    ;;
+esac
