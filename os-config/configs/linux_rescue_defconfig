@@ -22,9 +22,6 @@ BR2_INIT_BUSYBOX=y
 BR2_ROOTFS_SKELETON_DEFAULT=y
 BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_LINUX_RESCUE_PATH)/rootfs_overlay"
 
-# ── No serial getty (we provide our own TUI inittab) ─────────────────────────
-BR2_TARGET_GENERIC_GETTY=n
-
 # ── Core utils & Hardware Management ──────────────────────────────────────────
 BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_EUDEV=y
 BR2_PACKAGE_BUSYBOX=y
