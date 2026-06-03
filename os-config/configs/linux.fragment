@@ -19,3 +19,7 @@ CONFIG_FONT_8x8=y
 CONFIG_DRM=y
 CONFIG_DRM_SIMPLEDRM=y
 CONFIG_SYSFB_SIMPLEFB=y
+
+# --- NVMe Support (Built-in, not module — needed in cpio initramfs) ---
+CONFIG_NVME_CORE=y
+CONFIG_BLK_DEV_NVME=y
