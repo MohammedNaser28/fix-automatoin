@@ -1,5 +1,5 @@
 ::sysinit:/etc/init.d/rcS
-tty1::respawn:env PATH=/usr/bin:/usr/sbin:/bin:/sbin TERM=linux /usr/bin/fix-automation
+tty1::respawn:-/bin/sh -c "export PATH=/usr/bin:/usr/sbin:/bin:/sbin TERM=linux; stty sane 2>/dev/null; setsid /usr/bin/fix-automation </dev/tty1 >/dev/tty1 2>&1"
 ::ctrlaltdel:/sbin/reboot
 ::shutdown:/etc/init.d/rcK
 ::restart:/sbin/init

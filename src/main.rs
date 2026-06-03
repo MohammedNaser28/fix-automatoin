@@ -4,7 +4,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{io, time::Duration};
+use std::{fs, io, os::unix::io::AsRawFd, time::Duration};
 
 mod screens;
 mod sys;
@@ -14,8 +14,41 @@ mod repair;
 
 use crate::app::{App, CurrentScreen, ConfirmFocus, ACTION_ITEMS};
 
+unsafe extern "C" {
+    fn dup2(oldfd: i32, newfd: i32) -> i32;
+}
+
+fn ensure_tty() {
+    let tty = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty1")
+        .or_else(|_| fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/ttyS0"))
+        .or_else(|_| fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/console"));
+
+    if let Ok(file) = tty {
+        let fd = file.as_raw_fd();
+        if fd >= 0 {
+            unsafe {
+                dup2(fd, 0);
+                dup2(fd, 1);
+                dup2(fd, 2);
+            }
+        }
+    }
+
+    let _ = std::process::Command::new("stty").args(["sane"]).status();
+}
+
 fn main() -> Result<(), io::Error> {
-    // Terminal Setup
+    ensure_tty();
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;

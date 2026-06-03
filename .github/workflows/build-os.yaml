@@ -2,7 +2,7 @@ name: Build Bootable OS & Rust Release
 
 on:
   push:
-    branches: [ "main", tty-respawn]
+    branches: [ "main", "tty-respawn", "tui-drive-fix" ]
     tags: [ "v*" ]
   workflow_dispatch:
 
@@ -33,6 +33,27 @@ jobs:
         with:
           targets: x86_64-unknown-linux-musl
 
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('fix-automation/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache Rust target (musl)
+        id: cache-target
+        uses: actions/cache@v4
+        with:
+          path: fix-automation/target
+          key: ${{ runner.os }}-cargo-target-musl-${{ hashFiles('fix-automation/Cargo.lock', 'fix-automation/src/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-musl-
+
       - name: Build Rust binary (static musl)
         run: |
           cd fix-automation
@@ -46,15 +67,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildroot-dl
 
+      - name: Cache Buildroot output (host tools + build artifacts)
+        uses: actions/cache@v4
+        with:
+          path: |
+            buildroot/output/host
+            buildroot/output/build
+          key: ${{ runner.os }}-buildroot-output-${{ hashFiles('fix-automation/os-config/**') }}
+          restore-keys: |
+            ${{ runner.os }}-buildroot-output-
+
       - name: Download Buildroot
         run: |
-          wget https://buildroot.org/downloads/buildroot-2025.02.13.tar.gz
+          wget -q https://buildroot.org/downloads/buildroot-2025.02.13.tar.gz
           mkdir -p buildroot
           tar -xf buildroot-2025.02.13.tar.gz -C buildroot --strip-components=1
 
       - name: Inject binary into overlay
         run: |
-          # Since inittab is already in the repo's overlay, we just need to drop the Rust binary in!
           mkdir -p fix-automation/os-config/rootfs_overlay/usr/bin
           cp fix-automation/target/x86_64-unknown-linux-musl/release/fix-automation \
              fix-automation/os-config/rootfs_overlay/usr/bin/fix-automation
@@ -63,7 +93,6 @@ jobs:
       - name: Build OS image
         run: |
           cd buildroot
-          # Point BR2_EXTERNAL to the root of your beautiful tree
           make BR2_EXTERNAL=$(pwd)/../fix-automation/os-config \
                linux_rescue_defconfig
           make -j$(nproc)
@@ -84,8 +113,7 @@ jobs:
             exit 1
           fi
 
-          # Creates grub.cfg with loglevel=7 and earlycon for debugging. NO nomodeset.
-          printf 'set timeout=5\nset default=0\nmenuentry "Fix-Automation Rescue (Rust)" {\n    linux  /EFI/BOOT/bzImage console=tty0 loglevel=7 earlycon=efifb fbcon=nodefer \n   initrd /EFI/BOOT/rootfs.cpio.gz\n}\n' \
+          printf 'set timeout=5\nset default=0\nmenuentry "Fix-Automation Rescue (Rust)" {\n    linux  /EFI/BOOT/bzImage console=tty0 loglevel=7 earlycon=efifb fbcon=nodefer\n    initrd /EFI/BOOT/rootfs.cpio.gz\n}\n' \
             > release/EFI/BOOT/grub.cfg
 
           cd release && zip -r ../grub-rescue-usb.zip .
