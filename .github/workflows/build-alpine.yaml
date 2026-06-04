@@ -76,7 +76,7 @@ jobs:
             -e BINARY_PATH=/build/target/x86_64-unknown-linux-musl/release/fix-automation \
             -e OUTPUT_DIR=/build/dist/alpine/output \
             fix-automation-builder \
-            bash /build/dist/alpine/build.sh --arch x86_64
+            sh /build/dist/alpine/build.sh --arch x86_64
 
       - uses: actions/upload-artifact@v4
         with:

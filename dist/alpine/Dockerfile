@@ -11,4 +11,4 @@ WORKDIR /build
 
 VOLUME ["/build"]
 
-ENTRYPOINT ["bash", "/build/dist/alpine/build.sh"]
+ENTRYPOINT ["sh", "/build/dist/alpine/build.sh"]
