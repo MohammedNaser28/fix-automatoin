@@ -89,6 +89,14 @@ strip "$STAGING_DIR/rootfs/fix-automation" 2>/dev/null || true
 # Step 4: Add minimal /etc files
 # ══════════════════════════════════════════════════════════════════════════════
 info "Adding minimal /etc files ..."
+
+# /init — handoff script so kernel always finds a /init entry point
+cat > "$STAGING_DIR/rootfs/init" << 'INIT_EOF'
+#!/bin/sh
+exec /fix-automation
+INIT_EOF
+chmod 755 "$STAGING_DIR/rootfs/init"
+
 # /etc/passwd — single root entry
 echo "root:x:0:0:root:/:/fix-automation" > "$STAGING_DIR/rootfs/etc/passwd"
 # /etc/group
@@ -148,7 +156,7 @@ info "  Creating EFI boot image ..."
 grub-mkstandalone \
     --format=x86_64-efi \
     --output="$ISO_DIR/boot/grub/bootx64.efi" \
-    --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal" \
+    --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal efi" \
     "boot/grub/grub.cfg=$GRUB_CFG"
 
 # Verify bootloader exists
