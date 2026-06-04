@@ -2,7 +2,7 @@ FROM alpine:3.21 AS builder
 
 RUN apk add --no-cache \
     wget cpio gzip xorriso grub grub-efi grub-bios \
-    curl coreutils grep \
+    curl coreutils grep dosfstools mtools \
     linux-lts
 
 # Pre-installed kernel from linux-lts package

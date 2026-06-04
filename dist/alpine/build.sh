@@ -151,22 +151,29 @@ grub-mkstandalone \
     --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal" \
     "boot/grub/grub.cfg=$GRUB_CFG"
 
-# Also create standard UEFI fallback path (some firmware scans for this)
-mkdir -p "$ISO_DIR/EFI/BOOT"
-cp "$ISO_DIR/boot/grub/bootx64.efi" "$ISO_DIR/EFI/BOOT/BOOTX64.EFI"
-
-# Verify bootloader exists before building ISO
-if [ ! -f "$ISO_DIR/EFI/BOOT/BOOTX64.EFI" ]; then
-    err "BOOTX64.EFI not found at $ISO_DIR/EFI/BOOT/BOOTX64.EFI — grub-mkstandalone failed"
+# Verify bootloader exists
+if [ ! -f "$ISO_DIR/boot/grub/bootx64.efi" ]; then
+    err "bootx64.efi not found at $ISO_DIR/boot/grub/bootx64.efi — grub-mkstandalone failed"
 fi
 
 # Build UEFI-only ISO with xorriso
+# UEFI firmware requires the El Torito boot entry to be a FAT filesystem image
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
+EFI_IMG="$STAGING_DIR/efi.img"
+info "  Creating FAT EFI boot image ..."
+dd if=/dev/zero of="$EFI_IMG" bs=1K count=4096 2>/dev/null
+mkfs.fat -F 12 "$EFI_IMG" >/dev/null 2>&1
+mcopy -i "$EFI_IMG" "$ISO_DIR/boot/grub/bootx64.efi" ::/EFI/BOOT/BOOTX64.EFI
+ok "EFI boot image: $(numfmt_to_iec $(stat -c%s "$EFI_IMG"))"
+
+# Copy EFI image into ISO tree for xorriso to use as boot entry
+cp "$EFI_IMG" "$ISO_DIR/boot/grub/efi.img"
+
 info "  Running xorriso ..."
 xorriso -as mkisofs \
     -iso-level 3 -rock -joliet \
     -eltorito-alt-boot \
-    -e EFI/BOOT/BOOTX64.EFI \
+    -e boot/grub/efi.img \
     -no-emul-boot \
     -volid "FIX_AUTOMATION" \
     -o "$OUTPUT_ISO" \
