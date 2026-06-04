@@ -152,7 +152,7 @@ info "  Creating EFI boot image ..."
 grub-mkstandalone \
     --format=x86_64-efi \
     --output="$ISO_DIR/boot/grub/bootx64.efi" \
-    --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal efi" \
+    --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal relocator" \
     "boot/grub/grub.cfg=$GRUB_CFG"
 
 # Verify bootloader exists
