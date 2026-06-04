@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, Paragraph},
     Frame,
 };
-use crate::app::App;
+use crate::app::{App, ScanState};
 use crate::ui::theme::THEME;
 
 pub fn render(f: &mut Frame, app: &mut App) {
@@ -57,16 +57,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
         ]),
     };
 
-    let main_lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "GRUB RESCUE",
-            Style::default().fg(THEME.cyan).add_modifier(Modifier::BOLD),
-        )),
-        Line::from(Span::styled("bootable repair tool", Style::default().fg(THEME.comment))),
-        Line::from(""),
-        Line::from(Span::styled("scanning block devices...", Style::default().fg(THEME.comment))),
-        Line::from(""),
+    let scan_line = if app.scan_state == ScanState::Scanning {
+        Line::from(vec![
+            Span::styled("⟳ ", Style::default().fg(THEME.yellow)),
+            Span::styled("scanning block devices...", Style::default().fg(THEME.yellow)),
+        ])
+    } else {
         Line::from(vec![
             Span::styled("✓ ", Style::default().fg(THEME.green)),
             Span::raw("found "),
@@ -75,7 +71,19 @@ pub fn render(f: &mut Frame, app: &mut App) {
                 Style::default().fg(THEME.cyan).add_modifier(Modifier::BOLD),
             ),
             Span::raw(" block devices"),
-        ]),
+        ])
+    };
+
+    let main_lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "GRUB RESCUE",
+            Style::default().fg(THEME.cyan).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled("bootable repair tool", Style::default().fg(THEME.comment))),
+        Line::from(""),
+        scan_line,
+        Line::from(""),
         Line::from(vec![
             Span::styled("✓ ", Style::default().fg(THEME.green)),
             Span::raw("detected firmware: "),

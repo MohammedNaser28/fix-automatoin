@@ -22,8 +22,8 @@ pub fn draw_layout(f: &mut Frame, title: &str) -> Vec<Rect> {
     f.render_widget(header, chunks[0]);
 
     // Render Global Footer
-    let footer = Paragraph::new(" [Q] Quit | [Enter] Next | [Esc] Back ")
-        .block(Block::default().borders(Borders::ALL).border_style(THEME.green));
+    let footer = Paragraph::new(" [Q] Quit · [P] Poweroff · [R] Reboot | [Enter] Next · [Esc] Back ")
+        .block(Block::default().borders(Borders::ALL).border_style(THEME.comment));
     f.render_widget(footer, chunks[2]);
 
     chunks.to_vec()

@@ -67,16 +67,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildroot-dl
 
-      - name: Cache Buildroot output (host tools + build artifacts)
-        uses: actions/cache@v4
-        with:
-          path: |
-            buildroot/output/host
-            buildroot/output/build
-          key: ${{ runner.os }}-buildroot-output-${{ hashFiles('fix-automation/os-config/**') }}
-          restore-keys: |
-            ${{ runner.os }}-buildroot-output-
-
       - name: Download Buildroot
         run: |
           wget -q https://buildroot.org/downloads/buildroot-2025.02.13.tar.gz

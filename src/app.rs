@@ -2,6 +2,14 @@ use ratatui::widgets::TableState;
 use std::sync::mpsc::Receiver;
 use crate::sys::blkdev::DiskInfo;
 
+// ─── Scan State ────────────────────────────────────────────────────────────────
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ScanState {
+    Scanning,
+    Done,
+}
+
 // ─── Screens ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -129,6 +137,10 @@ pub struct App {
     pub selected_root: Option<DiskInfo>,
     pub selected_efi:  Option<DiskInfo>,
 
+    // Scan state (disk detection runs async to show immediate UI)
+    pub scan_state: ScanState,
+    pub scan_rx:    Option<Receiver<Vec<DiskInfo>>>,
+
     // Shared table/list UI state
     pub table_state: TableState,
 
@@ -152,7 +164,13 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        let disks       = crate::sys::blkdev::get_disks();
+        let (scan_tx, scan_rx) = std::sync::mpsc::channel::<Vec<DiskInfo>>();
+
+        std::thread::spawn(move || {
+            let disks = crate::sys::blkdev::get_disks();
+            let _ = scan_tx.send(disks);
+        });
+
         let is_uefi     = crate::sys::firmware::is_uefi();
         let network_info = crate::sys::network::get_ip();
 
@@ -170,9 +188,12 @@ impl App {
             confirm_focus:   ConfirmFocus::Confirm,
             network_info,
 
-            disks,
+            disks: Vec::new(),
             selected_root: None,
             selected_efi:  None,
+
+            scan_state: ScanState::Scanning,
+            scan_rx:    Some(scan_rx),
 
             table_state,
 
@@ -260,6 +281,19 @@ impl App {
             if label.contains("mint")                               { return "Linux Mint".into(); }
         }
         "Unknown Linux".into()
+    }
+
+    // ── Scan — check if background disk detection finished ────────────────────
+
+    pub fn check_scan(&mut self) {
+        if self.scan_state != ScanState::Scanning { return; }
+        if let Some(ref rx) = self.scan_rx {
+            if let Ok(disks) = rx.try_recv() {
+                self.disks = disks;
+                self.scan_state = ScanState::Done;
+                self.scan_rx = None;
+            }
+        }
     }
 
     // ── Exec log — drain pending lines from the repair thread ─────────────────

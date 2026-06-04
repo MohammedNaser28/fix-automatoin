@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::process::Command;
 
 #[derive(Clone, Debug)]
@@ -52,6 +53,7 @@ pub fn get_disks() -> Vec<DiskInfo> {
         }
     };
 
+    let mut seen = HashSet::new();
     let mut disks = Vec::new();
 
     for dev in decoded.blockdevices {
@@ -59,38 +61,84 @@ pub fn get_disks() -> Vec<DiskInfo> {
 
         if !has_children {
             let is_efi = dev.fstype.as_deref() == Some("vfat");
-            disks.push(DiskInfo {
-                name: dev.name,
-                size: dev.size,
-                fstype: dev.fstype,
-                label: dev.label,
-                uuid: dev.uuid,
-                mountpoint: dev.mountpoint,
-                is_efi,
-                contents: if is_efi { Some("Scanning...".into()) } else { None },
-            });
+            if seen.insert(dev.name.clone()) {
+                disks.push(DiskInfo {
+                    name: dev.name,
+                    size: dev.size,
+                    fstype: dev.fstype,
+                    label: dev.label,
+                    uuid: dev.uuid,
+                    mountpoint: dev.mountpoint,
+                    is_efi,
+                    contents: if is_efi { Some("Scanning...".into()) } else { None },
+                });
+            }
             continue;
         }
 
         if let Some(partitions) = dev.children {
             for part in partitions {
                 let is_efi = part.fstype.as_deref() == Some("vfat");
-                disks.push(DiskInfo {
-                    name: part.name,
-                    size: part.size,
-                    fstype: part.fstype,
-                    label: part.label,
-                    uuid: part.uuid,
-                    mountpoint: part.mountpoint,
-                    is_efi,
-                    contents: if is_efi {
-                        Some("Scanning...".into())
-                    } else {
-                        None
-                    },
-                });
+                if seen.insert(part.name.clone()) {
+                    disks.push(DiskInfo {
+                        name: part.name,
+                        size: part.size,
+                        fstype: part.fstype,
+                        label: part.label,
+                        uuid: part.uuid,
+                        mountpoint: part.mountpoint,
+                        is_efi,
+                        contents: if is_efi {
+                            Some("Scanning...".into())
+                        } else {
+                            None
+                        },
+                    });
+                }
             }
         }
     }
+
+    // Also detect raw devices via /sys/block (catches NVMe drives without
+    // a partition table, or drives udev hasn't fully probed yet).
+    if let Ok(entries) = std::fs::read_dir("/sys/block") {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy().to_string();
+            if name.starts_with("loop") || name.starts_with("ram")
+                || name.starts_with("zram") || name.starts_with("dm-")
+                || seen.contains(&name) {
+                continue;
+            }
+            seen.insert(name.clone());
+
+            let size = std::fs::read_to_string(format!("/sys/block/{name}/size"))
+                .ok()
+                .and_then(|s| s.trim().parse::<u64>().ok())
+                .map(|sectors| {
+                    let bytes = sectors * 512;
+                    if bytes >= 1_000_000_000_000 {
+                        format!("{:.1}T", bytes as f64 / 1_000_000_000_000.0)
+                    } else if bytes >= 1_000_000_000 {
+                        format!("{:.1}G", bytes as f64 / 1_000_000_000.0)
+                    } else {
+                        format!("{:.0}M", bytes as f64 / 1_000_000.0)
+                    }
+                })
+                .unwrap_or_default();
+
+            disks.push(DiskInfo {
+                name,
+                size,
+                fstype: None,
+                label: None,
+                uuid: None,
+                mountpoint: None,
+                is_efi: false,
+                contents: None,
+            });
+        }
+    }
+
     disks
 }

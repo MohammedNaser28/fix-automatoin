@@ -70,20 +70,23 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let btn_layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(10),
-            Constraint::Percentage(20), // back to menu
-            Constraint::Percentage(10),
-            Constraint::Percentage(20), // reboot
-            Constraint::Percentage(10),
-            Constraint::Percentage(20), // export logs
-            Constraint::Percentage(10),
+            Constraint::Percentage(5),
+            Constraint::Percentage(22), // back to menu
+            Constraint::Percentage(1),
+            Constraint::Percentage(22), // reboot
+            Constraint::Percentage(1),
+            Constraint::Percentage(22), // poweroff
+            Constraint::Percentage(1),
+            Constraint::Percentage(22), // export logs
+            Constraint::Percentage(5),
         ])
         .split(main_layout[3]);
 
     let options = [
         ("back to menu", 1),
-        ("reboot system", 3),
-        ("export logs", 5),
+        ("reboot",       3),
+        ("poweroff",     5),
+        ("export logs",  7),
     ];
 
     for (i, (label, col_idx)) in options.iter().enumerate() {

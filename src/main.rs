@@ -28,13 +28,27 @@ fn main() -> Result<(), io::Error> {
     loop {
         terminal.draw(|f| screens::render(f, &mut app))?;
 
+        // Check if background disk scan finished
+        app.check_scan();
+
         // Drain any log lines from the running repair thread
         app.drain_log();
 
         // Poll with timeout so the repair thread output updates the UI in real-time
         if event::poll(Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
-                handle_input(&mut app, key.code);
+                // Global shortcuts: poweroff, reboot (works on every screen)
+                match key.code {
+                    KeyCode::Char('p') => {
+                        let _ = std::process::Command::new("poweroff").status();
+                        app.should_quit = true;
+                    }
+                    KeyCode::Char('r') => {
+                        let _ = std::process::Command::new("reboot").status();
+                        app.should_quit = true;
+                    }
+                    _ => handle_input(&mut app, key.code),
+                }
             }
         }
 
@@ -196,7 +210,7 @@ fn handle_input(app: &mut App, code: KeyCode) {
                     if app.result_cursor > 0 { app.result_cursor -= 1; }
                 }
                 KeyCode::Right => {
-                    if app.result_cursor < 2 { app.result_cursor += 1; }
+                    if app.result_cursor < 3 { app.result_cursor += 1; }
                 }
                 KeyCode::Enter => {
                     match app.result_cursor {
@@ -207,7 +221,11 @@ fn handle_input(app: &mut App, code: KeyCode) {
                             let _ = std::process::Command::new("reboot").status();
                             app.should_quit = true;
                         }
-                        2 => { // export logs
+                        2 => { // poweroff
+                            let _ = std::process::Command::new("poweroff").status();
+                            app.should_quit = true;
+                        }
+                        3 => { // export logs
                             app.current_screen = CurrentScreen::LogExport;
                         }
                         _ => {}
