@@ -54,7 +54,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: rust-bin-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}-unknown-linux-musl/release/fix-automaton
+          path: target/${{ matrix.arch }}-unknown-linux-musl/release/fix-automation
           retention-days: 1
 
   build-iso:
@@ -70,18 +70,18 @@ jobs:
 
       - name: Build Alpine ISO in Docker
         run: |
-          docker build -t fix-automaton-builder -f dist/alpine/Dockerfile .
+          docker build -t fix-automation-builder -f dist/alpine/Dockerfile .
           docker run --rm --privileged \
             -v $PWD:/build \
-            -e BINARY_PATH=/build/target/x86_64-unknown-linux-musl/release/fix-automaton \
+            -e BINARY_PATH=/build/target/x86_64-unknown-linux-musl/release/fix-automation \
             -e OUTPUT_DIR=/build/dist/alpine/output \
-            fix-automaton-builder \
+            fix-automation-builder \
             bash /build/dist/alpine/build.sh --arch x86_64
 
       - uses: actions/upload-artifact@v4
         with:
-          name: fix-automaton-x86_64-alpine.iso
-          path: dist/alpine/output/fix-automaton-x86_64-alpine.iso
+          name: fix-automation-x86_64-alpine.iso
+          path: dist/alpine/output/fix-automation-x86_64-alpine.iso
           retention-days: 7
 
   qemu-boot:
@@ -90,7 +90,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: fix-automaton-x86_64-alpine.iso
+          name: fix-automation-x86_64-alpine.iso
 
       - name: Install QEMU deps
         run: |
@@ -100,7 +100,7 @@ jobs:
       - name: Boot test
         run: |
           timeout 30 qemu-system-x86_64 \
-            -cdrom fix-automaton-x86_64-alpine.iso \
+            -cdrom fix-automation-x86_64-alpine.iso \
             -m 512M -machine q35 -display none \
             -serial file:serial.log -no-reboot -accel tcg || true
           grep -q "GRUB RESCUE\|rescue" serial.log && echo "PASS" || (echo "FAIL: TUI not detected"; cat serial.log; exit 1)
@@ -113,10 +113,10 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: fix-automaton-x86_64-alpine.iso
+          name: fix-automation-x86_64-alpine.iso
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: fix-automaton-x86_64-alpine.iso
+          files: fix-automation-x86_64-alpine.iso
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
