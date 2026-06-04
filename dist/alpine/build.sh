@@ -143,35 +143,22 @@ cp "$STAGING_DIR/initramfs.cpio.gz" "$ISO_DIR/boot/initramfs.cpio.gz"
 # Copy grub.cfg
 cp "$GRUB_CFG" "$ISO_DIR/boot/grub/grub.cfg"
 
-# Produce EFI bootloader image via grub-mkstandalone
+# Produce EFI bootloader image via grub-mkstandalone (UEFI only)
 info "  Creating EFI boot image ..."
 grub-mkstandalone \
     --format=x86_64-efi \
     --output="$ISO_DIR/boot/grub/bootx64.efi" \
-    --modules="part_gpt part_msdos fat iso9660 linux normal configfile search" \
+    --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal" \
     "boot/grub/grub.cfg=$GRUB_CFG"
 
-# Produce BIOS boot image (core.img loads grub.cfg from ISO at runtime)
-# Note: --compress=xz is required to stay under the 480KB BIOS limit
-info "  Creating BIOS boot image ..."
-grub-mkimage \
-    --format=i386-pc \
-    --output="$ISO_DIR/boot/grub/core.img" \
-    --prefix="/boot/grub" \
-    --compress=xz \
-    biosdisk part_msdos iso9660 linux normal configfile search
-
-# Build hybrid ISO with xorriso
+# Build UEFI-only ISO with xorriso
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
 info "  Running xorriso ..."
 xorriso -as mkisofs \
     -iso-level 3 -rock -joliet \
-    -b boot/grub/core.img \
-    -no-emul-boot -boot-load-size 4 -boot-info-table \
-    -eltorito-alt-boot \
     -e boot/grub/bootx64.efi \
     -no-emul-boot \
-    -volid "FIX_AUTOMATON" \
+    -volid "FIX_AUTOMATION" \
     -o "$OUTPUT_ISO" \
     "$ISO_DIR"
 

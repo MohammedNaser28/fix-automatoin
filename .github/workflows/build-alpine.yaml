@@ -97,12 +97,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 ovmf
 
-      - name: Boot test
+      - name: Boot test (UEFI)
         run: |
+          OVMF=$(find /usr/share -name "OVMF.4m.fd" 2>/dev/null | head -1)
+          [ -z "$OVMF" ] && OVMF=$(find /usr/share -name "OVMF.fd" 2>/dev/null | head -1)
+          [ -z "$OVMF" ] && OVMF="/usr/share/ovmf/OVMF.fd"
+          echo "Using OVMF: $OVMF"
           timeout 30 qemu-system-x86_64 \
             -cdrom fix-automation-x86_64-alpine.iso \
-            -m 512M -machine pc -nographic -no-reboot -accel tcg 2>&1 | tee serial.log || true
-          grep -q "GRUB-RESCUE\|fix-automation\|VERSION" serial.log && echo "PASS" || (echo "FAIL: TUI not detected"; cat serial.log; exit 1)
+            -m 512M -machine q35 -nographic \
+            -bios "$OVMF" \
+            -no-reboot -accel tcg 2>&1 | tee serial.log || true
+          grep -q "GRUB-RESCUE\|fix-automation" serial.log && echo "PASS" || (echo "FAIL: TUI not detected"; cat serial.log; exit 1)
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
