@@ -161,8 +161,8 @@ fi
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
 EFI_IMG="$STAGING_DIR/efi.img"
 info "  Creating FAT EFI boot image ..."
-dd if=/dev/zero of="$EFI_IMG" bs=1K count=4096 2>/dev/null
-mkfs.fat -F 12 "$EFI_IMG" >/dev/null 2>&1
+dd if=/dev/zero of="$EFI_IMG" bs=1M count=16 2>/dev/null
+mkfs.fat -F 16 "$EFI_IMG" >/dev/null 2>&1
 mmd -i "$EFI_IMG" ::EFI ::EFI/BOOT
 mcopy -i "$EFI_IMG" "$ISO_DIR/boot/grub/bootx64.efi" ::EFI/BOOT/BOOTX64.EFI
 ok "EFI boot image: $(numfmt_to_iec $(stat -c%s "$EFI_IMG"))"
