@@ -161,14 +161,18 @@ if [ ! -f "$ISO_DIR/boot/grub/bootx64.efi" ]; then
 fi
 
 # Build UEFI-only ISO with xorriso
-# UEFI firmware requires the El Torito boot entry to be a FAT filesystem image
+# UEFI firmware requires the El Torito boot entry to be a FAT filesystem image.
+# Kernel + initramfs go inside the FAT image so GRUB loads them from its
+# default root — avoids any `search --label` or ISO filesystem quirks.
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
 EFI_IMG="$STAGING_DIR/efi.img"
 info "  Creating FAT EFI boot image ..."
-dd if=/dev/zero of="$EFI_IMG" bs=1M count=16 2>/dev/null
+dd if=/dev/zero of="$EFI_IMG" bs=1M count=32 2>/dev/null
 mkfs.fat -F 16 "$EFI_IMG" >/dev/null 2>&1
-mmd -i "$EFI_IMG" ::EFI ::EFI/BOOT
+mmd -i "$EFI_IMG" ::EFI ::EFI/BOOT ::boot
 mcopy -i "$EFI_IMG" "$ISO_DIR/boot/grub/bootx64.efi" ::EFI/BOOT/BOOTX64.EFI
+mcopy -i "$EFI_IMG" "$ISO_DIR/boot/vmlinuz"           ::boot/vmlinuz
+mcopy -i "$EFI_IMG" "$ISO_DIR/boot/initramfs.cpio.gz"  ::boot/initramfs.cpio.gz
 ok "EFI boot image: $(numfmt_to_iec $(stat -c%s "$EFI_IMG"))"
 
 # Copy EFI image into ISO tree for xorriso to use as boot entry
