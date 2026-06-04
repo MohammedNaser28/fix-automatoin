@@ -2,7 +2,7 @@
 # strip-rootfs.sh — Minimize Alpine minirootfs to bare minimum.
 # Usage: strip-rootfs.sh /path/to/rootfs
 # Must be run as root (for mknod).
-set -euo pipefail
+set -eu
 
 ROOTFS="${1:?Usage: $0 /path/to/rootfs}"
 

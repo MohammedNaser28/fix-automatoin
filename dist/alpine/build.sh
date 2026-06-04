@@ -10,7 +10,7 @@
 # Usage:
 #   sudo bash dist/alpine/build.sh [--arch x86_64] [--output-dir dist/alpine/output]
 #
-set -euo pipefail
+set -eu
 
 # ── Config ────────────────────────────────────────────────────────────────────
 ARCH="${ARCH:-x86_64}"
@@ -21,6 +21,7 @@ ALPINE_FULL="${ALPINE_VERSION}.0"
 BINARY_PATH="${BINARY_PATH:-target/${ARCH}-unknown-linux-musl/release/fix-automaton}"
 GRUB_CFG="${GRUB_CFG:-dist/alpine/grub.cfg}"
 STRIP_SCRIPT="${STRIP_SCRIPT:-dist/alpine/strip-rootfs.sh}"
+VMLINUZ_PATH="${VMLINUZ_PATH:-/vmlinuz}"
 
 cleanup() { rm -rf "$STAGING_DIR"; }
 trap cleanup EXIT
@@ -29,6 +30,19 @@ info()  { echo -e "[INFO]  $*"; }
 ok()    { echo -e "[OK]    $*"; }
 warn()  { echo -e "[WARN]  $*"; }
 err()   { echo -e "[ERR]   $*"; exit 1; }
+
+numfmt_to_iec() {
+    local bytes=$1
+    if [ "$bytes" -ge 1073741824 ]; then
+        echo "$((bytes / 1073741824)).$(((bytes % 1073741824) / 107374182))G"
+    elif [ "$bytes" -ge 1048576 ]; then
+        echo "$((bytes / 1048576)).$(((bytes % 1048576) / 104857))M"
+    elif [ "$bytes" -ge 1024 ]; then
+        echo "$((bytes / 1024))K"
+    else
+        echo "${bytes}B"
+    fi
+}
 
 # ── Checks ────────────────────────────────────────────────────────────────────
 [ "$(id -u)" -eq 0 ] || err "Must be run as root"
@@ -95,82 +109,23 @@ info "Building initramfs ..."
     find . | cpio -oH newc --quiet | gzip -9 > "$STAGING_DIR/initramfs.cpio.gz"
 )
 INITRAMFS_SIZE=$(stat -c%s "$STAGING_DIR/initramfs.cpio.gz")
-ok "Initramfs: $(numfmt --to=iec $INITRAMFS_SIZE)"
+ok "Initramfs: $(numfmt_to_iec $INITRAMFS_SIZE)"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 6: Get kernel
+# Step 6: Get kernel (pre-installed by Dockerfile at /vmlinuz)
 # ══════════════════════════════════════════════════════════════════════════════
-info "Fetching Alpine linux-lts kernel ..."
-KERNEL_PKG="alpine-linux-lts-${ARCH}.tar.gz"
-if [ ! -f "/tmp/$KERNEL_PKG" ]; then
-    # Download the kernel package from Alpine's APK index
-    APK_INDEX="/tmp/alpine-APKINDEX.tar.gz"
-    if [ ! -f "$APK_INDEX" ]; then
-        wget -q -O "$APK_INDEX" \
-            "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION}/main/${ARCH}/APKINDEX.tar.gz"
-    fi
-
-    # Extract APKINDEX to find the linux-lts package filename
-    tar -xzf "$APK_INDEX" -C /tmp 2>/dev/null || true
-    # The APKINDEX is a .tar.gz containing DESCRIPTION, APKINDEX.  We need
-    # to parse APKINDEX to find the package version.  Simpler: just download
-    # the latest linux-lts .apk directly (version is in the URL).
-    # We'll use the latest known.  For Alpine 3.21, this should be recent.
-    # Try to find it from the packages index.
-    LTS_APK=$(curl -s "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION}/main/${ARCH}/" | grep -oP 'linux-lts-\d+\.\d+\.\d+-\d+-'"${ARCH}"'\.apk' | sort -V | tail -1 2>/dev/null || true)
-
-    if [ -z "$LTS_APK" ]; then
-        # Fallback: download and extract the APK containing vmlinuz
-        # The kernel package is linux-lts (no version needed in URL for latest)
-        warn "Could not determine latest linux-lts version — trying linux-lts-r$((RANDOM % 100))"
-        warn "Falling back: will download from Alpine's edge channel"
-        LTS_APK="linux-lts-${ARCH}.apk"
-    fi
-
-    if [ ! -f "/tmp/$LTS_APK" ]; then
-        wget -q -O "/tmp/$LTS_APK" \
-            "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION}/main/${ARCH}/${LTS_APK}" || {
-            warn "Direct apk download failed, trying alternative URL..."
-            # Get the APKINDEX properly
-            tar -xzf "$APK_INDEX" -C "/tmp/alpine-apk" 2>/dev/null || true
-            # Fallback: use pre-built kernel from the repo or build our own
-            # For now, this is a placeholder — the user should provide a kernel
-            warn "Kernel auto-download failed. Provide vmlinuz manually."
-            warn "Place it at: $OUTPUT_DIR/vmlinuz"
-            touch "$STAGING_DIR/no-kernel"
-        }
-    fi
-fi
-
-if [ -f "/tmp/$LTS_APK" ]; then
-    info "Extracting kernel from APK ..."
-    KERNEL_TMP="$STAGING_DIR/kernel-extract"
-    mkdir -p "$KERNEL_TMP"
-    tar -xzf "/tmp/$LTS_APK" -C "$KERNEL_TMP" 2>/dev/null || {
-        # It's an APK (tar.gz with .apk extension), same format
-        true
-    }
-    # Find vmlinuz in the extracted files
-    VMLINUZ=$(find "$KERNEL_TMP" -name "vmlinuz-*" -type f | head -1)
-    if [ -n "$VMLINUZ" ]; then
-        cp "$VMLINUZ" "$STAGING_DIR/vmlinuz"
-        ok "Kernel: $(basename "$VMLINUZ")"
-    else
-        warn "vmlinuz not found in APK"
-        # Try extracting the .apk as tar.gz directly
-        mkdir -p "$STAGING_DIR/kernel-tar"
-        tar -xzf "/tmp/$LTS_APK" -C "$STAGING_DIR/kernel-tar" 2>/dev/null || true
-        VMLINUZ=$(find "$STAGING_DIR/kernel-tar" -name "vmlinuz-*" -type f | head -1)
-        if [ -n "$VMLINUZ" ]; then
-            cp "$VMLINUZ" "$STAGING_DIR/vmlinuz"
-            ok "Kernel: $(basename "$VMLINUZ")"
-        fi
-    fi
-fi
-
-if [ ! -f "$STAGING_DIR/vmlinuz" ]; then
-    warn "No vmlinuz found. Please provide one:"
-    warn "  cp /boot/vmlinuz-linux $OUTPUT_DIR/vmlinuz"
+info "Fetching kernel ..."
+if [ -f "$VMLINUZ_PATH" ]; then
+    cp "$VMLINUZ_PATH" "$STAGING_DIR/vmlinuz"
+    ok "Kernel: $(basename "$VMLINUZ_PATH") ($(numfmt_to_iec $(stat -c%s "$STAGING_DIR/vmlinuz")))"
+elif [ -f "/boot/vmlinuz-lts" ]; then
+    cp "/boot/vmlinuz-lts" "$STAGING_DIR/vmlinuz"
+    ok "Kernel: vmlinuz-lts"
+elif [ -f "/boot/vmlinuz-linux" ]; then
+    cp "/boot/vmlinuz-linux" "$STAGING_DIR/vmlinuz"
+    ok "Kernel: vmlinuz-linux"
+else
+    warn "No kernel found at $VMLINUZ_PATH or /boot/vmlinuz-*"
     warn "Build continuing without kernel..."
 fi
 
@@ -194,7 +149,7 @@ grub-mkstandalone \
     --format=x86_64-efi \
     --output="$ISO_DIR/boot/grub/bootx64.efi" \
     --modules="part_gpt part_msdos fat iso9660 linux normal configfile search" \
-    "boot/grub/grub.cfg=$GRUB_CFG" 2>/dev/null
+    "boot/grub/grub.cfg=$GRUB_CFG"
 
 # Produce BIOS boot image
 info "  Creating BIOS boot image ..."
@@ -202,7 +157,7 @@ grub-mkstandalone \
     --format=i386-pc \
     --output="$ISO_DIR/boot/grub/core.img" \
     --modules="biosdisk part_msdos iso9660 linux normal configfile search" \
-    "boot/grub/grub.cfg=$GRUB_CFG" 2>/dev/null
+    "boot/grub/grub.cfg=$GRUB_CFG"
 
 # Build hybrid ISO with xorriso
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automaton-${ARCH}-alpine.iso"
@@ -222,11 +177,11 @@ xorriso -as mkisofs \
 # Done
 # ══════════════════════════════════════════════════════════════════════════════
 ISO_SIZE=$(stat -c%s "$OUTPUT_ISO")
-ok "ISO: $(numfmt --to=iec $ISO_SIZE)"
+ok "ISO: $(numfmt_to_iec $ISO_SIZE)"
 echo ""
 echo "──────────────────────────────────────────────"
 echo "  Output: $OUTPUT_ISO"
-echo "  Size:   $(numfmt --to=iec $ISO_SIZE)"
+echo "  Size:   $(numfmt_to_iec $ISO_SIZE)"
 echo ""
 echo "  Write to USB:"
 echo "    sudo dd if=$OUTPUT_ISO of=/dev/sdX bs=4M status=progress"
