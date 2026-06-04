@@ -151,11 +151,16 @@ grub-mkstandalone \
     --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal" \
     "boot/grub/grub.cfg=$GRUB_CFG"
 
+# Also create standard UEFI fallback path (some firmware scans for this)
+mkdir -p "$ISO_DIR/EFI/BOOT"
+cp "$ISO_DIR/boot/grub/bootx64.efi" "$ISO_DIR/EFI/BOOT/BOOTX64.EFI"
+
 # Build UEFI-only ISO with xorriso
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
 info "  Running xorriso ..."
 xorriso -as mkisofs \
     -iso-level 3 -rock -joliet \
+    -eltorito-alt-boot \
     -e boot/grub/bootx64.efi \
     -no-emul-boot \
     -volid "FIX_AUTOMATION" \
