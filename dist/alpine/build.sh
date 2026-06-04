@@ -151,13 +151,15 @@ grub-mkstandalone \
     --modules="part_gpt part_msdos fat iso9660 linux normal configfile search" \
     "boot/grub/grub.cfg=$GRUB_CFG"
 
-# Produce BIOS boot image
+# Produce BIOS boot image (core.img loads grub.cfg from ISO at runtime)
+# Note: --compress=xz is required to stay under the 480KB BIOS limit
 info "  Creating BIOS boot image ..."
-grub-mkstandalone \
+grub-mkimage \
     --format=i386-pc \
     --output="$ISO_DIR/boot/grub/core.img" \
-    --modules="biosdisk part_msdos iso9660 linux normal configfile search" \
-    "boot/grub/grub.cfg=$GRUB_CFG"
+    --prefix="/boot/grub" \
+    --compress=xz \
+    biosdisk part_msdos iso9660 linux normal configfile search
 
 # Build hybrid ISO with xorriso
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automaton-${ARCH}-alpine.iso"
