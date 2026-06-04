@@ -1,9 +1,9 @@
 #!/bin/sh
-# build.sh — Build Alpine-based fix-automaton bootable ISO.
+# build.sh — Build Alpine-based fix-automation bootable ISO.
 #
 # Prerequisites:
-#   - The fix-automaton binary must already be compiled at
-#     target/<arch>-unknown-linux-musl/release/fix-automaton
+#   - The fix-automation binary must already be compiled at
+#     target/<arch>-unknown-linux-musl/release/fix-automation
 #   - Must be run as root (for mknod in strip-rootfs.sh)
 #   - Dependencies: wget, cpio, gzip (or zstd), xorriso, grub2
 #
@@ -15,10 +15,10 @@ set -eu
 # ── Config ────────────────────────────────────────────────────────────────────
 ARCH="${ARCH:-x86_64}"
 OUTPUT_DIR="${OUTPUT_DIR:-dist/alpine/output}"
-STAGING_DIR="/tmp/fix-automaton-alpine-$$"
+STAGING_DIR="/tmp/fix-automation-alpine-$$"
 ALPINE_VERSION="${ALPINE_VERSION:-3.21}"
 ALPINE_FULL="${ALPINE_VERSION}.0"
-BINARY_PATH="${BINARY_PATH:-target/${ARCH}-unknown-linux-musl/release/fix-automaton}"
+BINARY_PATH="${BINARY_PATH:-target/${ARCH}-unknown-linux-musl/release/fix-automation}"
 GRUB_CFG="${GRUB_CFG:-dist/alpine/grub.cfg}"
 STRIP_SCRIPT="${STRIP_SCRIPT:-dist/alpine/strip-rootfs.sh}"
 VMLINUZ_PATH="${VMLINUZ_PATH:-/vmlinuz}"
@@ -76,21 +76,21 @@ info "Stripping rootfs ..."
 sh "$STRIP_SCRIPT" "$STAGING_DIR/rootfs"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 3: Add fix-automaton binary
+# Step 3: Add fix-automation binary
 # ══════════════════════════════════════════════════════════════════════════════
-info "Adding fix-automaton binary ..."
-cp "$BINARY_PATH" "$STAGING_DIR/rootfs/fix-automaton"
-chmod 755 "$STAGING_DIR/rootfs/fix-automaton"
+info "Adding fix-automation binary ..."
+cp "$BINARY_PATH" "$STAGING_DIR/rootfs/fix-automation"
+chmod 755 "$STAGING_DIR/rootfs/fix-automation"
 
 # Strip again (binary already stripped by Cargo profile, belt-and-suspenders)
-strip "$STAGING_DIR/rootfs/fix-automaton" 2>/dev/null || true
+strip "$STAGING_DIR/rootfs/fix-automation" 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Step 4: Add minimal /etc files
 # ══════════════════════════════════════════════════════════════════════════════
 info "Adding minimal /etc files ..."
 # /etc/passwd — single root entry
-echo "root:x:0:0:root:/:/fix-automaton" > "$STAGING_DIR/rootfs/etc/passwd"
+echo "root:x:0:0:root:/:/fix-automation" > "$STAGING_DIR/rootfs/etc/passwd"
 # /etc/group
 echo "root:x:0:0" > "$STAGING_DIR/rootfs/etc/group"
 # /etc/hostname
@@ -162,7 +162,7 @@ grub-mkimage \
     biosdisk part_msdos iso9660 linux normal configfile search
 
 # Build hybrid ISO with xorriso
-OUTPUT_ISO="${OUTPUT_DIR}/fix-automaton-${ARCH}-alpine.iso"
+OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
 info "  Running xorriso ..."
 xorriso -as mkisofs \
     -iso-level 3 -rock -joliet \
