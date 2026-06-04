@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # build.sh — Build Alpine-based fix-automaton bootable ISO.
 #
 # Prerequisites:
@@ -59,7 +59,7 @@ tar -xzf "/tmp/$ROOTFS_TAR" -C "$STAGING_DIR/rootfs"
 # Step 2: Strip rootfs to minimum
 # ══════════════════════════════════════════════════════════════════════════════
 info "Stripping rootfs ..."
-bash "$STRIP_SCRIPT" "$STAGING_DIR/rootfs"
+sh "$STRIP_SCRIPT" "$STAGING_DIR/rootfs"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Step 3: Add fix-automaton binary
