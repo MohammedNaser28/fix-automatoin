@@ -1,16 +1,16 @@
 // src/screens/mod.rs
 
-use ratatui::Frame;
 use crate::app::{App, CurrentScreen};
+use ratatui::Frame;
 
-pub mod welcome;
-pub mod select_root;
-pub mod select_efi;
-pub mod confirm;
 pub mod action_menu;
+pub mod confirm;
 pub mod exec_log;
-pub mod results;
 pub mod log_export;
+pub mod results;
+pub mod select_efi;
+pub mod select_root;
+pub mod welcome;
 
 pub fn render(f: &mut Frame, app: &mut App) {
     match app.current_screen {

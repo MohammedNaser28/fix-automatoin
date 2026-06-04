@@ -1,12 +1,12 @@
+use crate::app::{App, ScanState};
+use crate::ui::theme::THEME;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph},
-    Frame,
 };
-use crate::app::{App, ScanState};
-use crate::ui::theme::THEME;
 
 pub fn render(f: &mut Frame, app: &mut App) {
     let area = f.area();
@@ -37,12 +37,16 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let divider = Paragraph::new("─".repeat(area.width as usize))
         .style(Style::default().bg(THEME.background).fg(THEME.comment));
     f.render_widget(divider.clone(), chunks[1]);
-    f.render_widget(divider,         chunks[3]);
+    f.render_widget(divider, chunks[3]);
 
     // ── Main content ─────────────────────────────────────────────────────────
     let disk_count = app.disks.len();
     let firmware_label = if app.is_uefi { "UEFI" } else { "BIOS" };
-    let arch_tag       = if app.is_uefi { " x86_64-efi " } else { " i386-pc " };
+    let arch_tag = if app.is_uefi {
+        " x86_64-efi "
+    } else {
+        " i386-pc "
+    };
 
     let network_line = match &app.network_info {
         Some(ip) => Line::from(vec![
@@ -60,7 +64,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let scan_line = if app.scan_state == ScanState::Scanning {
         Line::from(vec![
             Span::styled("⟳ ", Style::default().fg(THEME.yellow)),
-            Span::styled("scanning block devices...", Style::default().fg(THEME.yellow)),
+            Span::styled(
+                "scanning block devices...",
+                Style::default().fg(THEME.yellow),
+            ),
         ])
     } else {
         Line::from(vec![
@@ -80,16 +87,27 @@ pub fn render(f: &mut Frame, app: &mut App) {
             "GRUB RESCUE",
             Style::default().fg(THEME.cyan).add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::styled("bootable repair tool", Style::default().fg(THEME.comment))),
+        Line::from(Span::styled(
+            "bootable repair tool",
+            Style::default().fg(THEME.comment),
+        )),
         Line::from(""),
         scan_line,
         Line::from(""),
         Line::from(vec![
             Span::styled("✓ ", Style::default().fg(THEME.green)),
             Span::raw("detected firmware: "),
-            Span::styled(firmware_label, Style::default().fg(THEME.yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                firmware_label,
+                Style::default()
+                    .fg(THEME.yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw("  "),
-            Span::styled(arch_tag, Style::default().bg(THEME.selection).fg(THEME.cyan)),
+            Span::styled(
+                arch_tag,
+                Style::default().bg(THEME.selection).fg(THEME.cyan),
+            ),
         ]),
         network_line,
     ];

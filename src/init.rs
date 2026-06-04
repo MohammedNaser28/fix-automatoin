@@ -23,23 +23,19 @@ pub fn init_system() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn mount_fs() -> Result<(), Box<dyn std::error::Error>> {
-    use nix::mount::{mount, MsFlags};
+    use nix::mount::{MsFlags, mount};
 
     let flags = MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV;
 
-    let _ = mount::<str, str, str, str>(
-        Some("proc"), "/proc", Some("proc"),
-        flags, None::<&str>,
-    );
+    let _ = mount::<str, str, str, str>(Some("proc"), "/proc", Some("proc"), flags, None::<&str>);
 
-    let _ = mount::<str, str, str, str>(
-        Some("sysfs"), "/sys", Some("sysfs"),
-        flags, None::<&str>,
-    );
+    let _ = mount::<str, str, str, str>(Some("sysfs"), "/sys", Some("sysfs"), flags, None::<&str>);
 
     if !Path::new("/dev/console").exists() {
         mount::<str, str, str, str>(
-            Some("devtmpfs"), "/dev", Some("devtmpfs"),
+            Some("devtmpfs"),
+            "/dev",
+            Some("devtmpfs"),
             MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
             None::<&str>,
         )?;
@@ -99,12 +95,10 @@ fn set_controlling_tty() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn setup_signals() -> Result<(), Box<dyn std::error::Error>> {
-    use nix::sys::signal::{sigaction, SaFlags, SigAction, SigHandler, Signal, SigSet};
+    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
 
     extern "C" fn sigchld_handler(_sig: i32) {
-        unsafe {
-            while libc::waitpid(-1, std::ptr::null_mut(), libc::WNOHANG) > 0 {}
-        }
+        unsafe { while libc::waitpid(-1, std::ptr::null_mut(), libc::WNOHANG) > 0 {} }
     }
 
     let action = SigAction::new(

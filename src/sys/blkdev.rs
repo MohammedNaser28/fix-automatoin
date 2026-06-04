@@ -1,6 +1,6 @@
+#[cfg(not(feature = "alpine"))]
 use serde::Deserialize;
 use std::collections::HashSet;
-use std::path::Path;
 #[cfg(not(feature = "alpine"))]
 use std::process::Command;
 
@@ -16,11 +16,13 @@ pub struct DiskInfo {
     pub contents: Option<String>,
 }
 
+#[cfg(not(feature = "alpine"))]
 #[derive(Deserialize)]
 struct LsblkOutput {
     blockdevices: Vec<BlockDevice>,
 }
 
+#[cfg(not(feature = "alpine"))]
 #[derive(Deserialize)]
 struct BlockDevice {
     name: String,
@@ -81,7 +83,11 @@ fn get_disks_lsblk() -> Vec<DiskInfo> {
                     uuid: dev.uuid,
                     mountpoint: dev.mountpoint,
                     is_efi,
-                    contents: if is_efi { Some("Scanning...".into()) } else { None },
+                    contents: if is_efi {
+                        Some("Scanning...".into())
+                    } else {
+                        None
+                    },
                 });
             }
             continue;
@@ -99,7 +105,11 @@ fn get_disks_lsblk() -> Vec<DiskInfo> {
                         uuid: part.uuid,
                         mountpoint: part.mountpoint,
                         is_efi,
-                        contents: if is_efi { Some("Scanning...".into()) } else { None },
+                        contents: if is_efi {
+                            Some("Scanning...".into())
+                        } else {
+                            None
+                        },
                     });
                 }
             }
@@ -110,14 +120,18 @@ fn get_disks_lsblk() -> Vec<DiskInfo> {
     disks
 }
 
+#[cfg(not(feature = "alpine"))]
 fn add_sysfs_fallback(seen: &mut HashSet<String>, disks: &mut Vec<DiskInfo>) {
     if let Ok(entries) = std::fs::read_dir("/sys/block") {
         for entry in entries.flatten() {
             let name = entry.file_name();
             let name = name.to_string_lossy().to_string();
-            if name.starts_with("loop") || name.starts_with("ram")
-                || name.starts_with("zram") || name.starts_with("dm-")
-                || seen.contains(&name) {
+            if name.starts_with("loop")
+                || name.starts_with("ram")
+                || name.starts_with("zram")
+                || name.starts_with("dm-")
+                || seen.contains(&name)
+            {
                 continue;
             }
             seen.insert(name.clone());
@@ -138,6 +152,7 @@ fn add_sysfs_fallback(seen: &mut HashSet<String>, disks: &mut Vec<DiskInfo>) {
     }
 }
 
+#[cfg(not(feature = "alpine"))]
 fn read_sysfs_size(name: &str) -> String {
     std::fs::read_to_string(format!("/sys/block/{name}/size"))
         .ok()
@@ -172,9 +187,12 @@ fn get_disks_sysfs() -> Vec<DiskInfo> {
         let blocks: u64 = parts[2].parse().unwrap_or(0);
 
         // Skip loop, ram, zram, dm-
-        if name.starts_with("loop") || name.starts_with("ram")
-            || name.starts_with("zram") || name.starts_with("dm-")
-            || seen.contains(&name) {
+        if name.starts_with("loop")
+            || name.starts_with("ram")
+            || name.starts_with("zram")
+            || name.starts_with("dm-")
+            || seen.contains(&name)
+        {
             continue;
         }
         seen.insert(name.clone());
@@ -213,7 +231,15 @@ fn get_disks_sysfs() -> Vec<DiskInfo> {
 }
 
 #[cfg(feature = "alpine")]
-fn probe_partition(name: &str) -> (Option<String>, Option<String>, Option<String>, Option<String>, bool) {
+fn probe_partition(
+    name: &str,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    bool,
+) {
     let (fstype, mountpoint) = mount_info(name);
     let is_efi = fstype.as_deref() == Some("vfat");
     let label = read_first_line(&format!("/sys/block/{}/uevent", parent(name)))
@@ -248,7 +274,7 @@ fn parent(name: &str) -> &str {
 
 #[cfg(feature = "alpine")]
 fn read_first_line(path: &str) -> Option<String> {
-    std::fs::read_to_string(path).ok().and_then(|s| {
-        s.lines().next().map(|l| l.trim().to_string())
-    })
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.lines().next().map(|l| l.trim().to_string()))
 }

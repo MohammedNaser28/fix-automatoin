@@ -1,15 +1,25 @@
 // TODO: Add the functionality for check fstype file and UUID and check it's the same to resolve resizing and editing problems
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum FstabIssue {
-    UuidMismatch { mount_point: String, expected_uuid: String, live_uuid: Option<String> },
-    MissingSwap {live_swap_uuid: String},
-    UnusualFsType {mount_point: String,fstab_type: String, live_type: String},
+    UuidMismatch {
+        mount_point: String,
+        expected_uuid: String,
+        live_uuid: Option<String>,
+    },
+    MissingSwap {
+        live_swap_uuid: String,
+    },
+    UnusualFsType {
+        mount_point: String,
+        fstab_type: String,
+        live_type: String,
+    },
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct LivePartition {
     pub path: String,
     pub uuid: String,
@@ -18,15 +28,18 @@ pub struct LivePartition {
 }
 pub struct FstabAuditor;
 
-impl FstabAuditor { 
-    pub fn audit_fstab(chroot_path: &Path, live_devs: &[LivePartition]) -> std::io::Result<Vec<FstabIssue>> {
+impl FstabAuditor {
+    pub fn audit_fstab(
+        chroot_path: &Path,
+        live_devs: &[LivePartition],
+    ) -> std::io::Result<Vec<FstabIssue>> {
         let fstab_path = chroot_path.join("etc/fstab");
         let mut issues = Vec::new();
 
         if !fstab_path.exists() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "The target /etc/fstab configuration file is missing completely."
+                "The target /etc/fstab configuration file is missing completely.",
             ));
         }
 
@@ -47,18 +60,25 @@ impl FstabAuditor {
                 continue; // Malformed or unusual line entry format skipped safely
             }
 
-            let fs_spec = fields[0];      // Device identifier: UUID=... or /dev/sda1
+            let fs_spec = fields[0]; // Device identifier: UUID=... or /dev/sda1
             let mount_point = fields[1].to_string(); // e.g., "/", "/boot/efi"
-            let fstab_type = fields[2].to_string();  // e.g., "ext4", "swap"
+            let fstab_type = fields[2].to_string(); // e.g., "ext4", "swap"
 
             checked_mount_points.push(mount_point.clone());
 
             // Isolate UUID targets out of the spec definition column string
             let target_uuid = if fs_spec.starts_with("UUID=") {
-                Some(fs_spec.replace("UUID=", "").trim_matches('"').trim_matches('\'').to_string())
+                Some(
+                    fs_spec
+                        .replace("UUID=", "")
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_string(),
+                )
             } else if fs_spec.starts_with("/dev/") {
                 // If the entry uses a raw node path, search our live table to locate its UUID footprint
-                live_devs.iter()
+                live_devs
+                    .iter()
                     .find(|p| p.path == fs_spec)
                     .map(|p| p.uuid.clone())
             } else {
@@ -83,7 +103,8 @@ impl FstabAuditor {
                     None => {
                         // CRITICAL CHECK B: The configured UUID cannot be found on the physical system
                         // Let's check if another live partition claims this target mount point instead
-                        let true_live_partition = live_devs.iter()
+                        let true_live_partition = live_devs
+                            .iter()
                             .find(|p| p.current_mount.as_ref() == Some(&mount_point));
 
                         issues.push(FstabIssue::UuidMismatch {
@@ -101,7 +122,9 @@ impl FstabAuditor {
         for live_part in live_devs {
             if live_part.fstype == "swap" {
                 // If a physical swap partition exists but isn't explicitly declared, flag it
-                let is_swap_in_fstab = checked_mount_points.iter().any(|m| m == "none" || m == "swap");
+                let is_swap_in_fstab = checked_mount_points
+                    .iter()
+                    .any(|m| m == "none" || m == "swap");
                 if !is_swap_in_fstab {
                     issues.push(FstabIssue::MissingSwap {
                         live_swap_uuid: live_part.uuid.clone(),

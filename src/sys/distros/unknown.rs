@@ -1,5 +1,5 @@
-use std::path::Path;
 use crate::sys::distros::Distro;
+use std::path::Path;
 
 pub struct UnknownDistro {
     pub detected_name: String,
@@ -22,7 +22,9 @@ impl UnknownDistro {
             }
         }
 
-        UnknownDistro { detected_name: name }
+        UnknownDistro {
+            detected_name: name,
+        }
     }
 }
 

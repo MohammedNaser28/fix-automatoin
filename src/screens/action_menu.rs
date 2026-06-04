@@ -1,26 +1,38 @@
+use crate::app::{ACTION_ITEMS, App};
+use crate::ui::{theme::THEME, widgets};
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
-    Frame,
 };
-use crate::app::{App, ACTION_ITEMS};
-use crate::ui::{theme::THEME, widgets};
 
 pub fn render(f: &mut Frame, app: &mut App) {
     let chunks = widgets::draw_layout(f, "ACTION MENU");
 
     // Title line: distro + selected partition
     let distro = app.heuristic_distro();
-    let root_name = app.selected_root.as_ref().map(|d| d.name.clone()).unwrap_or_else(|| "?".into());
+    let root_name = app
+        .selected_root
+        .as_ref()
+        .map(|d| d.name.clone())
+        .unwrap_or_else(|| "?".into());
 
     let mut lines: Vec<Line> = vec![
         Line::from(vec![
             Span::raw("  "),
-            Span::styled(distro.to_lowercase(), Style::default().fg(THEME.purple).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                distro.to_lowercase(),
+                Style::default()
+                    .fg(THEME.purple)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" · ", Style::default().fg(THEME.comment)),
-            Span::styled(format!("/dev/{}", root_name), Style::default().fg(THEME.cyan)),
+            Span::styled(
+                format!("/dev/{}", root_name),
+                Style::default().fg(THEME.cyan),
+            ),
         ]),
         Line::from(""),
     ];
@@ -43,12 +55,13 @@ pub fn render(f: &mut Frame, app: &mut App) {
             None => {
                 let label = section_labels.get(section_idx).copied().unwrap_or("misc");
                 section_idx += 1;
-                lines.push(Line::from(vec![
-                    Span::styled(format!("  {}", label), Style::default().fg(THEME.comment)),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    format!("  {}", label),
+                    Style::default().fg(THEME.comment),
+                )]));
             }
             Some(action) => {
-                let is_selected  = i == app.action_cursor;
+                let is_selected = i == app.action_cursor;
                 let is_available = action.is_available();
 
                 let label_style = if is_selected {
@@ -94,12 +107,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled(
-            "  [Tab/↑↓] navigate   [Enter] select   [Esc] back",
-            Style::default().fg(THEME.comment),
-        ),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "  [Tab/↑↓] navigate   [Enter] select   [Esc] back",
+        Style::default().fg(THEME.comment),
+    )]));
 
     f.render_widget(Paragraph::new(lines), chunks[1]);
 

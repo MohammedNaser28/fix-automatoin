@@ -1,9 +1,9 @@
+use crate::ui::theme::THEME;
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
-use crate::ui::theme::THEME;
 
 pub fn draw_layout(f: &mut Frame, title: &str) -> Vec<Rect> {
     let chunks = Layout::default()
@@ -17,13 +17,21 @@ pub fn draw_layout(f: &mut Frame, title: &str) -> Vec<Rect> {
 
     // Render Global Header
     let header = Paragraph::new(format!(" GRUB-RESCUE v0.1.0 | Current: {}", title))
-        .block(Block::default().borders(Borders::ALL).border_style(THEME.green))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(THEME.green),
+        )
         .style(THEME.cyan);
     f.render_widget(header, chunks[0]);
 
     // Render Global Footer
-    let footer = Paragraph::new(" [Q] Quit · [P] Poweroff · [R] Reboot | [Enter] Next · [Esc] Back ")
-        .block(Block::default().borders(Borders::ALL).border_style(THEME.comment));
+    let footer =
+        Paragraph::new(" [Q] Quit · [P] Poweroff · [R] Reboot | [Enter] Next · [Esc] Back ").block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(THEME.comment),
+        );
     f.render_widget(footer, chunks[2]);
 
     chunks.to_vec()

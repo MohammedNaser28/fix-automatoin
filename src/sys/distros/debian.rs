@@ -1,11 +1,13 @@
+use crate::sys::distros::Distro;
 use std::path::Path;
 use std::process::Command;
-use crate::sys::distros::Distro;
 
 pub struct Debian;
 
 impl Distro for Debian {
-    fn name(&self) -> &'static str { "Debian/Ubuntu Family" }
+    fn name(&self) -> &'static str {
+        "Debian/Ubuntu Family"
+    }
 
     fn grub_config_path(&self) -> &Path {
         Path::new("/boot/grub/grub.cfg")
@@ -23,7 +25,7 @@ impl Distro for Debian {
             .status()?;
 
         if !status.success() {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "update-grub failed"));
+            return Err(std::io::Error::other("update-grub failed"));
         }
         Ok(())
     }

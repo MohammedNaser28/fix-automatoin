@@ -14,9 +14,13 @@ pub fn mount(device: &str) {
 
     #[cfg(feature = "alpine")]
     nix::mount::mount::<str, str, str, str>(
-        Some(device), MOUNT_PATH, None::<&str>,
-        nix::mount::MsFlags::MS_RDONLY, None::<&str>,
-    ).expect("mount failed");
+        Some(device),
+        MOUNT_PATH,
+        None::<&str>,
+        nix::mount::MsFlags::MS_RDONLY,
+        None::<&str>,
+    )
+    .expect("mount failed");
 
     #[cfg(not(feature = "alpine"))]
     {
@@ -38,9 +42,13 @@ pub fn mount_efi(efi_device: &str) {
 
     #[cfg(feature = "alpine")]
     nix::mount::mount::<str, str, str, str>(
-        Some(efi_device), MOUNT_EFI_PATH, None::<&str>,
-        nix::mount::MsFlags::empty(), None::<&str>,
-    ).expect("mount efi failed");
+        Some(efi_device),
+        MOUNT_EFI_PATH,
+        None::<&str>,
+        nix::mount::MsFlags::empty(),
+        None::<&str>,
+    )
+    .expect("mount efi failed");
 
     #[cfg(not(feature = "alpine"))]
     {
@@ -61,10 +69,13 @@ pub fn mount_bind() {
     for bind in &binds {
         let target = format!("{}{}", MOUNT_PATH, bind);
         nix::mount::mount::<str, str, str, str>(
-            Some(bind), &target, None::<&str>,
+            Some(bind),
+            &target,
+            None::<&str>,
             nix::mount::MsFlags::MS_BIND | nix::mount::MsFlags::MS_REC,
             None::<&str>,
-        ).expect("bind mount failed");
+        )
+        .expect("bind mount failed");
     }
 
     #[cfg(not(feature = "alpine"))]

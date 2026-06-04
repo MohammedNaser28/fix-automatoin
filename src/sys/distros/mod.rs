@@ -15,8 +15,12 @@ pub trait Distro {
     /// Handles any unique logic required post-installation (e.g., executing update-grub on Debian variants).
     fn post_grub_hook(&self, chroot_path: &Path) -> std::io::Result<()>;
 
-    fn grub_install_bin(&self) -> &'static str { "grub-install" }
-    fn grub_mkconfig_bin(&self) -> &'static str { "grub-mkconfig" }
+    fn grub_install_bin(&self) -> &'static str {
+        "grub-install"
+    }
+    fn grub_mkconfig_bin(&self) -> &'static str {
+        "grub-mkconfig"
+    }
 
     fn default_grub_file_path(&self) -> &Path {
         Path::new("etc/default/grub")
@@ -47,7 +51,11 @@ pub fn detect(target_mount: &Path) -> Box<dyn Distro> {
             if let Some((key, val)) = line.split_once('=') {
                 let key = key.trim();
                 // Strip both single and double quotes, and normalize to lowercase
-                let val = val.trim().trim_matches('"').trim_matches('\'').to_lowercase();
+                let val = val
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_lowercase();
 
                 if key == "ID" {
                     id = val;
@@ -62,7 +70,11 @@ pub fn detect(target_mount: &Path) -> Box<dyn Distro> {
             return Box::new(arch::ArchLinux);
         } else if id == "debian" || id == "ubuntu" || id_like.contains("debian") {
             return Box::new(debian::Debian);
-        } else if id == "fedora" || id == "rhel" || id_like.contains("fedora") || id_like.contains("rhel") {
+        } else if id == "fedora"
+            || id == "rhel"
+            || id_like.contains("fedora")
+            || id_like.contains("rhel")
+        {
             return Box::new(fedora::Fedora);
         }
     }

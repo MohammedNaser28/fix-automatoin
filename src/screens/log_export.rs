@@ -1,12 +1,12 @@
+use crate::app::{App, LogKind};
+use crate::ui::{theme::THEME, widgets};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
-use crate::app::{App, LogKind};
-use crate::ui::{theme::THEME, widgets};
 
 pub fn render(f: &mut Frame, app: &mut App) {
     let chunks = widgets::draw_layout(f, "EXPORT LOGS");
@@ -24,12 +24,13 @@ pub fn render(f: &mut Frame, app: &mut App) {
     // ── Header ────────────────────────────────────────────────────────
     let header_lines = vec![
         Line::from(""),
-        Line::from(vec![
-            Span::raw("  To share these logs for troubleshooting, run this command in another TTY:"),
-        ]),
-        Line::from(vec![
-            Span::styled("  $ cat /var/log/fix-automation.log | curl -F 'f:1=<-' ix.io", Style::default().fg(THEME.cyan)),
-        ]),
+        Line::from(vec![Span::raw(
+            "  To share these logs for troubleshooting, run this command in another TTY:",
+        )]),
+        Line::from(vec![Span::styled(
+            "  $ cat /var/log/fix-automation.log | curl -F 'f:1=<-' ix.io",
+            Style::default().fg(THEME.cyan),
+        )]),
         Line::from(""),
     ];
 
@@ -39,21 +40,23 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let mut log_text: Vec<Line> = Vec::new();
     for log in &app.log_lines {
         let style = match log.kind {
-            LogKind::Step   => Style::default().fg(THEME.comment),
+            LogKind::Step => Style::default().fg(THEME.comment),
             LogKind::Output => Style::default().fg(THEME.foreground),
-            LogKind::Ok     => Style::default().fg(THEME.green),
-            LogKind::Warn   => Style::default().fg(THEME.yellow),
-            LogKind::Error  => Style::default().fg(THEME.red),
+            LogKind::Ok => Style::default().fg(THEME.green),
+            LogKind::Warn => Style::default().fg(THEME.yellow),
+            LogKind::Error => Style::default().fg(THEME.red),
             _ => Style::default(),
         };
         log_text.push(Line::from(Span::styled(log.text.clone(), style)));
     }
 
     let log_block = Paragraph::new(log_text)
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title(" execution log ")
-            .border_style(Style::default().fg(THEME.comment)))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" execution log ")
+                .border_style(Style::default().fg(THEME.comment)),
+        )
         .style(Style::default().bg(ratatui::style::Color::Rgb(22, 27, 34)));
 
     f.render_widget(log_block, main_layout[1]);
@@ -75,7 +78,14 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     let btn = Paragraph::new("\n▶ go back")
         .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL).style(Style::default().bg(THEME.selection).fg(THEME.cyan).add_modifier(Modifier::BOLD)));
-        
+        .block(
+            Block::default().borders(Borders::ALL).style(
+                Style::default()
+                    .bg(THEME.selection)
+                    .fg(THEME.cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        );
+
     f.render_widget(btn, btn_layout[1]);
 }

@@ -1,10 +1,12 @@
-use std::path::Path;
 use crate::sys::distros::Distro;
+use std::path::Path;
 
 pub struct ArchLinux;
 
 impl Distro for ArchLinux {
-    fn name(&self) -> &'static str { "Arch Linux" }
+    fn name(&self) -> &'static str {
+        "Arch Linux"
+    }
 
     fn grub_config_path(&self) -> &Path {
         Path::new("/boot/grub/grub.cfg")
