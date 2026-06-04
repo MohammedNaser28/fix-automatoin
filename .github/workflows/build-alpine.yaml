@@ -103,7 +103,7 @@ jobs:
             -cdrom fix-automation-x86_64-alpine.iso \
             -m 512M -machine q35 -display none \
             -serial file:serial.log -no-reboot -accel tcg || true
-          grep -q "GRUB RESCUE\|rescue" serial.log && echo "PASS" || (echo "FAIL: TUI not detected"; cat serial.log; exit 1)
+          grep -q "GRUB-RESCUE\|fix-automation" serial.log && echo "PASS" || (echo "FAIL: TUI not detected"; cat serial.log; exit 1)
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
