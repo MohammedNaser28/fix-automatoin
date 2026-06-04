@@ -90,12 +90,8 @@ strip "$STAGING_DIR/rootfs/fix-automation" 2>/dev/null || true
 # ══════════════════════════════════════════════════════════════════════════════
 info "Adding minimal /etc files ..."
 
-# /init — handoff script so kernel always finds a /init entry point
-cat > "$STAGING_DIR/rootfs/init" << 'INIT_EOF'
-#!/bin/sh
-exec /fix-automation
-INIT_EOF
-chmod 755 "$STAGING_DIR/rootfs/init"
+# /init — symlink so kernel always finds a /init entry point
+ln -sf /fix-automation "$STAGING_DIR/rootfs/init"
 
 # /etc/passwd — single root entry
 echo "root:x:0:0:root:/:/fix-automation" > "$STAGING_DIR/rootfs/etc/passwd"
