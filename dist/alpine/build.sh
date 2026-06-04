@@ -155,13 +155,18 @@ grub-mkstandalone \
 mkdir -p "$ISO_DIR/EFI/BOOT"
 cp "$ISO_DIR/boot/grub/bootx64.efi" "$ISO_DIR/EFI/BOOT/BOOTX64.EFI"
 
+# Verify bootloader exists before building ISO
+if [ ! -f "$ISO_DIR/EFI/BOOT/BOOTX64.EFI" ]; then
+    err "BOOTX64.EFI not found at $ISO_DIR/EFI/BOOT/BOOTX64.EFI — grub-mkstandalone failed"
+fi
+
 # Build UEFI-only ISO with xorriso
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
 info "  Running xorriso ..."
 xorriso -as mkisofs \
     -iso-level 3 -rock -joliet \
     -eltorito-alt-boot \
-    -e boot/grub/bootx64.efi \
+    -e EFI/BOOT/BOOTX64.EFI \
     -no-emul-boot \
     -volid "FIX_AUTOMATION" \
     -o "$OUTPUT_ISO" \

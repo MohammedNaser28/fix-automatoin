@@ -78,6 +78,12 @@ jobs:
             fix-automation-builder \
             sh /build/dist/alpine/build.sh --arch x86_64
 
+      - name: Verify ISO contents
+        run: |
+          xorriso -indev dist/alpine/output/fix-automation-x86_64-alpine.iso -print 2>&1 | head -40
+          echo "---"
+          isoinfo -l -i dist/alpine/output/fix-automation-x86_64-alpine.iso 2>/dev/null || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: fix-automation-x86_64-alpine.iso
