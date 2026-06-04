@@ -3,8 +3,22 @@ name = "fix-automation"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["buildroot"]
+alpine = ["dep:nix", "dep:libc"]
+buildroot = []
+
 [dependencies]
 ratatui = "0.30.0"
 crossterm = "0.29.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+nix = { version = "0.29", optional = true, default-features = false, features = ["fs", "ioctl", "mount", "signal"] }
+libc = { version = "0.2", optional = true }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

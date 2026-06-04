@@ -11,10 +11,17 @@ mod sys;
 mod app;
 mod ui;
 mod repair;
+#[cfg(feature = "alpine")]
+mod init;
 
 use crate::app::{App, CurrentScreen, ConfirmFocus, ACTION_ITEMS};
 
 fn main() -> Result<(), io::Error> {
+    #[cfg(feature = "alpine")]
+    if let Err(e) = init::init_system() {
+        eprintln!("init_system: {} — continuing anyway", e);
+    }
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -24,41 +31,64 @@ fn main() -> Result<(), io::Error> {
     // Application State — disks, firmware, network loaded in App::new()
     let mut app = App::new();
 
-    // Main Loop
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_loop(&mut app, &mut terminal)
+    }));
+
+    // Restore Terminal
+    let _ = disable_raw_mode();
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+
+    match result {
+        Ok(r) => r,
+        Err(_) => {
+            #[cfg(feature = "alpine")]
+            init::panic_reboot();
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_loop(app: &mut App, terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<(), io::Error> {
     loop {
-        terminal.draw(|f| screens::render(f, &mut app))?;
+        terminal.draw(|f| screens::render(f, app))?;
 
-        // Check if background disk scan finished
         app.check_scan();
-
-        // Drain any log lines from the running repair thread
         app.drain_log();
 
-        // Poll with timeout so the repair thread output updates the UI in real-time
         if event::poll(Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
-                // Global shortcuts: poweroff, reboot (works on every screen)
                 match key.code {
                     KeyCode::Char('p') => {
-                        let _ = std::process::Command::new("poweroff").status();
+                        do_poweroff();
                         app.should_quit = true;
                     }
                     KeyCode::Char('r') => {
-                        let _ = std::process::Command::new("reboot").status();
+                        do_reboot();
                         app.should_quit = true;
                     }
-                    _ => handle_input(&mut app, key.code),
+                        _ => handle_input(app, key.code),
                 }
             }
         }
 
         if app.should_quit { break; }
     }
-
-    // Restore Terminal
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
+}
+
+fn do_poweroff() {
+    #[cfg(feature = "alpine")]
+    init::poweroff();
+    #[cfg(not(feature = "alpine"))]
+    { let _ = std::process::Command::new("poweroff").status(); }
+}
+
+fn do_reboot() {
+    #[cfg(feature = "alpine")]
+    init::reboot();
+    #[cfg(not(feature = "alpine"))]
+    { let _ = std::process::Command::new("reboot").status(); }
 }
 
 fn handle_input(app: &mut App, code: KeyCode) {
@@ -218,11 +248,11 @@ fn handle_input(app: &mut App, code: KeyCode) {
                             app.current_screen = CurrentScreen::ActionMenu;
                         }
                         1 => { // reboot
-                            let _ = std::process::Command::new("reboot").status();
+                            do_reboot();
                             app.should_quit = true;
                         }
                         2 => { // poweroff
-                            let _ = std::process::Command::new("poweroff").status();
+                            do_poweroff();
                             app.should_quit = true;
                         }
                         3 => { // export logs

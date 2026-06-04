@@ -345,6 +345,8 @@ name = "fix-automation"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "libc",
+ "nix",
  "ratatui",
  "serde",
  "serde_json",
