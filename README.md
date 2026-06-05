@@ -4,6 +4,20 @@ Bootable rescue USB tool — Rust + Ratatui TUI. Repairs GRUB, fixes fstab UUID 
 
 > **Target:** x86_64 UEFI/BIOS, Linux (Arch, Debian, Fedora, etc.)
 
+## Usage
+
+1. **Download** the latest ISO or ZIP from the [Releases page](https://github.com/MohammedNaser28/fix-automatoin-alpine/releases).
+2. **Write to USB:**
+   ```bash
+   # ISO (dd)
+   sudo dd if=fix-automation-x86_64-buildroot.iso of=/dev/sdX bs=4M status=progress
+   # or use balenaEtcher / Ventoy  (ZIP → extract to FAT32 USB)
+   ```
+3. **Boot** from the USB (enable USB boot in BIOS, or use boot menu key F12/F2/Esc).
+4. **Follow the screens** — select root partition, pick EFI partition, confirm targets, choose an action, and let it run.
+
+> The tool auto-detects your distro, mounts partitions, reinstalls GRUB, and fixes fstab UUIDs — no command-line knowledge needed.
+
 ## Screenshots / Demo
 
 <!-- TODO: add screen recording or annotated screenshots -->
