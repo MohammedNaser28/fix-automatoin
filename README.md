@@ -1,114 +1,195 @@
-# Fix-Automation
+# fix-automation
 
-Bootable rescue USB tool — Rust + Ratatui TUI. Repairs GRUB, fixes fstab UUID mismatches, and reconfigures bootloaders after partition changes or Windows installs.
+Bootable rescue USB tool — repairs broken GRUB, fixes fstab UUID mismatches, and recovers boot entries after partition changes or Windows installs.
 
-> **Target:** x86_64 UEFI/BIOS, Linux (Arch, Debian, Fedora, etc.)
+![CI build-os](https://github.com/MohammedNaser28/fix-automatoin-alpine/actions/workflows/build-os.yaml/badge.svg)
+![CI alpine](https://github.com/MohammedNaser28/fix-automatoin-alpine/actions/workflows/build-alpine.yaml/badge.svg)
+![Rust](https://img.shields.io/badge/rust-stable-orange?logo=rust)
+![Release](https://img.shields.io/github/v/release/MohammedNaser28/fix-automatoin-alpine)
+
+<p align="center">
+  <!-- TODO: add screenshot here -->
+  <img src="docs/screenshots/tui-main.png" alt="fix-automation TUI" width="700"/>
+</p>
+
+## What is fix-automation
+
+fix-automation solves the problem of a Linux system that won't boot. Whether GRUB was wiped by a Windows install, fstab UUIDs became stale after repartitioning, or an EFI boot entry went missing — booting from this USB lets you repair in place without needing a live desktop environment.
+
+The tool runs entirely offline. After booting from the USB, a Ratatui TUI walks you through scanning block devices, selecting the root and EFI partitions, confirming targets, and choosing a repair action. All repair operations run via chroot into your installed system, so the fixes persist after reboot. No internet connection is required.
+
+## Features
+
+- GRUB reinstall and grub.cfg regeneration (UEFI + BIOS)
+- fstab repair — auto-regenerate or edit manually
+- Device scan and firmware detection (UEFI/BIOS)
+- Chroot shell access for advanced recovery
+- Windows EFI entry recovery (recover from NTFS backup)
+- Partition manager — list, create, delete, resize
+- Log export via QR code and paste URL
+- Diagnose with AI — send logs to a language model
+- Works fully offline
+
+## Distributions
+
+Two bootable ISO variants are built from this repo. The Rust binary is the same in both; only the surrounding OS differs.
+
+| | Buildroot | Alpine |
+|---|---|---|
+| **ISO size** | ~TBD | ~TBD |
+| **Base OS** | Custom minimal Linux (Buildroot) | Alpine Linux |
+| **Boot method** | UEFI + BIOS, Ventoy, FAT32 USB | UEFI + BIOS, Ventoy |
+| **Rust feature flag** | `default` | `--features alpine` |
+| **Use case** | Smallest possible image, embedded-friendly | Familiar Alpine environment, easier to extend |
+| **Package manager** | None (static binary only) | apk available in chroot |
+
+Use **Buildroot** when you want the smallest image or are flashing to a tiny FAT32 partition. It boots fast and contains only what is needed for repair. This is the recommended variant for everyday rescue.
+
+Use **Alpine** when you want a more familiar Linux environment, need to install extra packages during a rescue session (via apk), or prefer Ventoy compatibility with the full Alpine userland available alongside the TUI.
+
+## Download
+
+Grab the latest release from the [releases page](https://github.com/MohammedNaser28/fix-automatoin-alpine/releases).
+
+| Artifact | Description |
+|---|---|
+| `fix-automation-x86_64-buildroot.iso` | Buildroot ISO — boot with Ventoy or burn directly |
+| `grub-rescue-usb.zip` | Buildroot ZIP — extract to a FAT32 USB partition manually |
+| `fix-automation-x86_64-alpine.iso` | Alpine ISO — boot with Ventoy or burn directly |
+| `fix-automation` | Raw static binary (musl) — for advanced use |
 
 ## Usage
 
-1. **Download** the latest ISO or ZIP from the [Releases page](https://github.com/MohammedNaser28/fix-automatoin-alpine/releases).
-2. **Write to USB:**
-   ```bash
-   # ISO (dd)
-   sudo dd if=fix-automation-x86_64-buildroot.iso of=/dev/sdX bs=4M status=progress
-   # or use balenaEtcher / Ventoy  (ZIP → extract to FAT32 USB)
-   ```
-3. **Boot** from the USB (enable USB boot in BIOS, or use boot menu key F12/F2/Esc).
-4. **Follow the screens** — select root partition, pick EFI partition, confirm targets, choose an action, and let it run.
+### Flash to USB
 
-> The tool auto-detects your distro, mounts partitions, reinstalls GRUB, and fixes fstab UUIDs — no command-line knowledge needed.
+**Method 1: dd (Linux/macOS)**
+```bash
+# replace /dev/sdX with your USB drive — double-check with lsblk
+sudo dd if=fix-automation-x86_64-buildroot.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
 
-## Screenshots / Demo
+**Method 2: Ventoy**
+```
+1. Install Ventoy on your USB drive (https://ventoy.net)
+2. Copy either .iso file to the Ventoy partition
+3. Boot from USB and select fix-automation from the Ventoy menu
+```
 
-<!-- TODO: add screen recording or annotated screenshots -->
-<!-- ![Welcome screen](media/welcome.png) -->
-<!-- ![Action menu](media/action-menu.png) -->
-<!-- ![BIOS boot test](media/bios-boot.gif) -->
+**Method 3: Manual FAT32 (Buildroot ZIP only)**
+```bash
+# Format a small partition (512MB is enough) as FAT32
+sudo mkfs.vfat -F32 /dev/sdX1
+sudo mount /dev/sdX1 /mnt/usb
+unzip grub-rescue-usb.zip -d /mnt/usb
+sudo umount /mnt/usb
+```
 
-Place images or a demo GIF in `media/` and link them above.
+### Boot and repair
 
-## Quick start
+1. Boot from the USB (set boot order in BIOS/UEFI or use boot menu key)
+2. fix-automation starts automatically — no login required
+3. Follow the TUI: scan detects your disks, select root and EFI partitions
+4. Choose your repair action from the action menu
+5. Review the execution log, export logs if needed
+6. Reboot when done
+
+## Test locally with QEMU
+
+### Buildroot ISO
 
 ```bash
-# Build native (for testing on your machine)
-cargo run
+# install deps
+sudo apt-get install -y qemu-system-x86 ovmf
 
-# Build static musl binary (for Alpine/ramfs)
+# UEFI boot
+qemu-system-x86_64 \
+  -cdrom fix-automation-x86_64-buildroot.iso \
+  -m 512M -machine q35 -nographic \
+  -bios /usr/share/ovmf/OVMF.fd \
+  -no-reboot -accel tcg
+
+# BIOS boot
+qemu-system-x86_64 \
+  -cdrom fix-automation-x86_64-buildroot.iso \
+  -m 512M -machine pc -nographic \
+  -no-reboot -accel tcg
+```
+
+### Alpine ISO
+
+```bash
+# UEFI boot
+qemu-system-x86_64 \
+  -cdrom fix-automation-x86_64-alpine.iso \
+  -m 512M -machine q35 -nographic \
+  -bios /usr/share/ovmf/OVMF.fd \
+  -no-reboot -accel tcg
+```
+
+## Build from source
+
+### Prerequisites
+
+```
+- Rust stable (rustup)
+- x86_64-unknown-linux-musl target: rustup target add x86_64-unknown-linux-musl
+- For Buildroot: Docker, or native Linux with make gcc g++ python3 bc wget cpio rsync
+- For Alpine: Docker
+```
+
+### Build
+
+```bash
+# clone
+git clone https://github.com/MohammedNaser28/fix-automatoin-alpine
+cd fix-automatoin-alpine
+
+# build default (Buildroot) binary
+cargo build --release --target x86_64-unknown-linux-musl
+
+# build Alpine binary
 cargo build --release --target x86_64-unknown-linux-musl --features alpine
 
-# Full image + QEMU boot test
-./qemu-test-full.sh
-```
-
-## Variants: Buildroot vs Alpine
-
-Two bootable ISO variants are built from this repo:
-
-| Variant | Base | Output | Best for |
-|---------|------|--------|----------|
-| **Buildroot** | Buildroot 2025.02 + musl + GRUB | `.iso` + `.zip` | General rescue — smaller image, direct GRUB control, BIOS+UEFI |
-| **Alpine** | Alpine Linux 3.21 + musl | `.iso` | Familiar Alpine env, larger package base, easier to extend |
-
-- **Buildroot** — a minimal initramfs-style image. Stripped down, boots fast, purpose-built for GRUB/fstab repair. Use this for everyday rescue.
-- **Alpine** — a full Alpine Linux ISO with the TUI running on top. Use this if you want a familiar Linux environment alongside the repair tool, or if you need to extend the image with packages.
-
-Both variants run the same Rust TUI binary; only the surrounding OS differs.
-
-## Screens flow
-
-```
-Welcome → SelectRoot → SelectEfi → Confirm → ActionMenu → ExecLog → Result → LogExport
+# full Alpine ISO (requires Docker)
+docker build -t fix-automation-builder -f dist/alpine/Dockerfile .
+docker run --rm --privileged \
+  -v $PWD:/build \
+  -e BINARY_PATH=/build/target/x86_64-unknown-linux-musl/release/fix-automation \
+  -e OUTPUT_DIR=/build/dist/alpine/output \
+  fix-automation-builder \
+  sh /build/dist/alpine/build.sh --arch x86_64
 ```
 
 ## Project structure
 
 ```
 fix-automation/
-├── src/                  ← Rust TUI application
-│   ├── main.rs           ← terminal init, event loop, render dispatch
-│   ├── app.rs            ← App state, screens, log pipeline
-│   ├── init.rs           ← first-boot init (run before the TUI)
-│   ├── repair.rs         ← background repair thread
-│   ├── screens/          ← one file per screen
-│   ├── sys/              ← system calls (mount, grub, fstab, blkdev...)
-│   └── ui/               ← theme colors + shared widgets
-│
-├── os-config/            ← Buildroot build configs
-│   ├── configs/          ← defconfig + kernel fragment
-│   ├── package/          ← Buildroot package recipe for fix-automation
-│   └── rootfs_overlay/   ← init scripts, inittab, network configs
-│
-├── dist/alpine/          ← Alpine Linux ISO builder
-│   ├── Dockerfile        ← Docker multistage build
-│   ├── build.sh          ← ISO construction script
-│   ├── grub.cfg          ← GRUB config for Alpine ISO
-│   ├── theme/            ← GRUB boot theme (png backgrounds, fonts)
-│   └── write-usb.sh      ← helper to write ISO to USB
-│
-├── .github/workflows/    ← CI/CD pipelines (Buildroot + Alpine)
-└── Cargo.toml
+├── src/                    # Rust TUI source
+├── os-config/              # Buildroot external tree
+│   ├── configs/            # Buildroot defconfig
+│   └── rootfs_overlay/     # Files injected into rootfs
+├── dist/
+│   └── alpine/             # Alpine ISO Dockerfile + build script
+├── .github/
+│   └── workflows/          # CI pipelines
+└── cliff.toml              # Changelog config (git-cliff)
 ```
 
-## Testing
+## CI / CD
 
-```bash
-# Unit tests
-cargo test
+Every push triggers the Rust CI (lint, clippy, test, build for both feature flags). Build and boot-test pipelines run in parallel for the Buildroot and Alpine variants. On version tags (`v*`), a GitHub Release is created with a changelog generated by git-cliff and the ISO/ZIP artifacts attached.
 
-# Rust CI checks (same as CI)
-cargo fmt --check
-cargo clippy -- -D warnings
-
-# QEMU boot test (requires Buildroot toolchain or prebuilt image)
-./qemu-test-full.sh
+```
+push / tag
+    │
+    ▼
+rust-ci.yml  (lint · clippy · test · build x2 features)
+    │
+    ├──► build-os.yaml   →  qemu-boot (UEFI + BIOS)  →  release
+    │
+    └──► build-alpine.yaml  →  qemu-boot (UEFI + BIOS)  →  release
 ```
 
-Each workflow (`build-os.yaml`, `build-alpine.yaml`) boots the produced ISO under both UEFI (`-machine q35`) and BIOS (`-machine pc`) and asserts that init completes successfully.
+## License
 
-## Contributing
-
-PRs welcome. Keep commits focused, run `cargo fmt` and `cargo clippy` first.
-
----
-
-Built by Mohammed Niri (OSC Linux Team) — Ain Shams University, 2025–2026.
+No license specified.
