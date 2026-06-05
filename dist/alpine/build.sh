@@ -195,10 +195,22 @@ if [ ! -f "$ISO_DIR/boot/grub/bootx64.efi" ]; then
     err "bootx64.efi not found at $ISO_DIR/boot/grub/bootx64.efi — grub-mkstandalone failed"
 fi
 
-# Build UEFI-only ISO with xorriso
-# UEFI firmware requires the El Torito boot entry to be a FAT filesystem image.
-# Kernel + initramfs go inside the FAT image so GRUB loads them from its
-# default root — avoids any `search --label` or ISO filesystem quirks.
+# Produce BIOS bootloader image via grub-mkstandalone (BIOS legacy boot)
+info "  Creating BIOS boot image ..."
+grub-mkstandalone \
+    --format=i386-pc \
+    --output="$ISO_DIR/boot/grub/boot.img" \
+    --modules="part_msdos iso9660 linux normal configfile search serial terminal all_video gfxterm gfxmenu png fat reboot halt" \
+    "boot/grub/grub.cfg=$GRUB_CFG"
+
+if [ ! -f "$ISO_DIR/boot/grub/boot.img" ]; then
+    err "boot.img not found at $ISO_DIR/boot/grub/boot.img — grub-mkstandalone (i386-pc) failed"
+fi
+
+# Build hybrid BIOS+UEFI ISO with xorriso
+# BIOS boots from boot.img (El Torito no-emulation entry), UEFI boots from
+# FAT filesystem image containing GRUB EFI binary, kernel, initramfs, and theme.
+# Kernel + initramfs are also on the ISO filesystem so both boot paths work.
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
 EFI_IMG="$STAGING_DIR/efi.img"
 info "  Creating FAT EFI boot image ..."
@@ -221,6 +233,9 @@ cp "$EFI_IMG" "$ISO_DIR/boot/grub/efi.img"
 info "  Running xorriso ..."
 xorriso -as mkisofs \
     -iso-level 3 -rock -joliet \
+    -b boot/grub/boot.img \
+    -no-emul-boot \
+    -boot-load-size 4 \
     -eltorito-alt-boot \
     -e boot/grub/efi.img \
     -no-emul-boot \
