@@ -6,121 +6,246 @@ on:
     tags: [ "v*" ]
   workflow_dispatch:
 
+env:
+  BUILDROOT_VERSION: "2025.02.13"
+
 jobs:
+  rust-ci:
+    uses: ./.github/workflows/rust-ci.yml
+
   build-os:
-    name: Compile Buildroot OS & Rust Binary
+    name: Build Buildroot OS image
+    needs: [rust-ci]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          path: fix-automation
+      - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-bin-x86_64-default
+          path: target/x86_64-unknown-linux-musl/release/
+
+      - name: mark binary executable
+        run: chmod +x target/x86_64-unknown-linux-musl/release/fix-automation
+
+      - name: install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             make gcc g++ unzip git bc python3 \
             device-tree-compiler mtools parted \
             dosfstools cpio rsync wget \
-            musl-tools libssl-dev libelf-dev
+            musl-tools libssl-dev libelf-dev \
+            xorriso grub-pc-bin grub-efi-amd64-bin
 
-      - name: Install Rust toolchain (musl target)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('fix-automation/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-
-      - name: Cache Rust target (musl)
-        id: cache-target
-        uses: actions/cache@v4
-        with:
-          path: fix-automation/target
-          key: ${{ runner.os }}-cargo-target-musl-${{ hashFiles('fix-automation/Cargo.lock', 'fix-automation/src/**/*.rs') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-target-musl-
-
-      - name: Build Rust binary (static musl)
-        run: |
-          cd fix-automation
-          cargo build --release --target x86_64-unknown-linux-musl
-
-      - name: Cache Buildroot downloads
+      - name: cache Buildroot downloads
         uses: actions/cache@v4
         with:
           path: buildroot/dl
-          key: ${{ runner.os }}-buildroot-dl-${{ hashFiles('fix-automation/os-config/configs/linux_rescue_defconfig') }}
-          restore-keys: |
-            ${{ runner.os }}-buildroot-dl
+          key: ${{ runner.os }}-buildroot-dl-${{ hashFiles('os-config/configs/linux_rescue_defconfig') }}
+          restore-keys: ${{ runner.os }}-buildroot-dl-
 
-      - name: Download Buildroot
+      - name: download Buildroot
         run: |
-          wget -q https://buildroot.org/downloads/buildroot-2025.02.13.tar.gz
+          wget -q https://buildroot.org/downloads/buildroot-${BUILDROOT_VERSION}.tar.gz
           mkdir -p buildroot
-          tar -xf buildroot-2025.02.13.tar.gz -C buildroot --strip-components=1
+          tar -xf buildroot-${BUILDROOT_VERSION}.tar.gz -C buildroot --strip-components=1
 
-      - name: Inject binary into overlay
+      - name: inject binary into overlay
         run: |
-          mkdir -p fix-automation/os-config/rootfs_overlay/usr/bin
-          cp fix-automation/target/x86_64-unknown-linux-musl/release/fix-automation \
-             fix-automation/os-config/rootfs_overlay/usr/bin/fix-automation
-          chmod +x fix-automation/os-config/rootfs_overlay/usr/bin/fix-automation
+          mkdir -p os-config/rootfs_overlay/usr/bin
+          cp target/x86_64-unknown-linux-musl/release/fix-automation \
+             os-config/rootfs_overlay/usr/bin/fix-automation
+          chmod +x os-config/rootfs_overlay/usr/bin/fix-automation
 
-      - name: Build OS image
+      - name: build OS image
         run: |
           cd buildroot
-          make BR2_EXTERNAL=$(pwd)/../fix-automation/os-config \
-               linux_rescue_defconfig
+          make BR2_EXTERNAL=$(pwd)/../os-config linux_rescue_defconfig
           make -j$(nproc)
 
-      - name: Package bootable ZIP
+      - name: find EFI binary
+        id: efi
         run: |
-          mkdir -p release/EFI/BOOT
-          cp buildroot/output/images/bzImage        release/EFI/BOOT/
-          cp buildroot/output/images/rootfs.cpio.gz release/EFI/BOOT/
-
           EFI_BIN=$(find buildroot/output/images/ -name "*.efi" | head -n 1)
-          if [ -n "$EFI_BIN" ] && [ -f "$EFI_BIN" ]; then
-            echo "Found GRUB EFI binary at $EFI_BIN"
-            cp "$EFI_BIN" release/EFI/BOOT/BOOTX64.EFI
-          else
+          if [ -z "$EFI_BIN" ]; then
             echo "ERROR: GRUB EFI binary not found"
             find buildroot/output/images/ -type f | sort
             exit 1
           fi
+          echo "path=${EFI_BIN}" >> $GITHUB_OUTPUT
 
-          printf 'set timeout=5\nset default=0\nmenuentry "Fix-Automation Rescue (Rust)" {\n    linux  /EFI/BOOT/bzImage console=tty0 loglevel=7 earlycon=efifb fbcon=nodefer\n    initrd /EFI/BOOT/rootfs.cpio.gz\n}\n' \
+      - name: package bootable ZIP
+        run: |
+          mkdir -p release/EFI/BOOT
+          cp buildroot/output/images/bzImage        release/EFI/BOOT/
+          cp buildroot/output/images/rootfs.cpio.gz release/EFI/BOOT/
+          cp ${{ steps.efi.outputs.path }}           release/EFI/BOOT/BOOTX64.EFI
+          printf 'set timeout=5\nset default=0\nmenuentry "Fix-Automation Rescue" {\n    linux  /EFI/BOOT/bzImage console=tty0 loglevel=7 earlycon=efifb fbcon=nodefer\n    initrd /EFI/BOOT/rootfs.cpio.gz\n}\n' \
             > release/EFI/BOOT/grub.cfg
-
           cd release && zip -r ../grub-rescue-usb.zip .
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: build bootable ISO (Ventoy compatible)
+        run: |
+          mkdir -p iso-root/EFI/BOOT iso-root/boot/grub
+
+          cp buildroot/output/images/bzImage        iso-root/EFI/BOOT/
+          cp buildroot/output/images/rootfs.cpio.gz iso-root/EFI/BOOT/
+          cp ${{ steps.efi.outputs.path }}           iso-root/EFI/BOOT/BOOTX64.EFI
+
+          # GRUB config for ISO boot (EFI + BIOS fallback via grub-pc-bin)
+          cat > iso-root/boot/grub/grub.cfg << 'EOF'
+          set timeout=5
+          set default=0
+          menuentry "Fix-Automation Rescue" {
+              linux  /EFI/BOOT/bzImage console=tty0 loglevel=7 earlycon=efifb fbcon=nodefer
+              initrd /EFI/BOOT/rootfs.cpio.gz
+          }
+          EOF
+
+          grub-mkrescue \
+            --output=fix-automation-x86_64-buildroot.iso \
+            iso-root/ \
+            -- -volid FIX-AUTOMATION
+
+      - name: verify ISO
+        run: |
+          xorriso -indev fix-automation-x86_64-buildroot.iso -print 2>&1 | head -40
+
+      - uses: actions/upload-artifact@v4
         with:
           name: grub-rescue-usb
           path: grub-rescue-usb.zip
           retention-days: 7
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+      - uses: actions/upload-artifact@v4
         with:
+          name: fix-automation-x86_64-buildroot.iso
+          path: fix-automation-x86_64-buildroot.iso
+          retention-days: 7
+
+  qemu-boot-uefi:
+    name: Boot test — UEFI (ZIP)
+    needs: [build-os]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: grub-rescue-usb
+
+      - name: install QEMU + OVMF
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf
+
+      - name: boot test UEFI via direct kernel+initrd
+        run: |
+          unzip grub-rescue-usb.zip -d usb-contents
+          OVMF=$(find /usr/share -name "OVMF.4m.fd" 2>/dev/null | head -1)
+          [ -z "$OVMF" ] && OVMF=$(find /usr/share -name "OVMF.fd" 2>/dev/null | head -1)
+          [ -z "$OVMF" ] && OVMF="/usr/share/ovmf/OVMF.fd"
+          echo "Using OVMF: $OVMF"
+          timeout 45 qemu-system-x86_64 \
+            -kernel usb-contents/EFI/BOOT/bzImage \
+            -initrd usb-contents/EFI/BOOT/rootfs.cpio.gz \
+            -append "console=ttyS0 loglevel=7" \
+            -m 512M -machine q35 -nographic \
+            -bios "$OVMF" \
+            -no-reboot -accel tcg 2>&1 | tee serial-uefi.log || true
+
+          grep -q "Run /init as init process" serial-uefi.log \
+            && echo "UEFI PASS" \
+            || (echo "UEFI FAIL"; cat serial-uefi.log; exit 1)
+
+      - name: check binary is present and executable
+        run: |
+          # Verify the fix-automation binary made it into the initrd
+          zcat usb-contents/EFI/BOOT/rootfs.cpio.gz \
+            | cpio -t 2>/dev/null \
+            | grep -q "usr/bin/fix-automation" \
+            && echo "BINARY PRESENT" \
+            || (echo "BINARY MISSING FROM INITRD"; exit 1)
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: serial-log-uefi-buildroot
+          path: serial-uefi.log
+          retention-days: 3
+
+  qemu-boot-bios:
+    name: Boot test — BIOS (ISO)
+    needs: [build-os]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: fix-automation-x86_64-buildroot.iso
+
+      - name: install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86
+
+      - name: boot test BIOS via ISO
+        run: |
+          timeout 45 qemu-system-x86_64 \
+            -cdrom fix-automation-x86_64-buildroot.iso \
+            -m 512M -machine pc -nographic \
+            -no-reboot -accel tcg 2>&1 | tee serial-bios.log || true
+
+          grep -q "Run /init as init process" serial-bios.log \
+            && echo "BIOS PASS" \
+            || (echo "BIOS FAIL"; cat serial-bios.log; exit 1)
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: serial-log-bios-buildroot
+          path: serial-bios.log
+          retention-days: 3
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [qemu-boot-uefi, qemu-boot-bios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: grub-rescue-usb
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fix-automation-x86_64-buildroot.iso
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-bin-x86_64-default
+          path: bin/
+
+      - name: generate changelog
+        uses: orhun/git-cliff-action@v3
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --latest --strip all
+        env:
+          OUTPUT: /tmp/release_notes.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/release_notes.txt
           files: |
             grub-rescue-usb.zip
-            fix-automation/target/x86_64-unknown-linux-musl/release/fix-automation
+            fix-automation-x86_64-buildroot.iso
+            bin/fix-automation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

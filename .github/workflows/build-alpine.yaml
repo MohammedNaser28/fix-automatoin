@@ -7,68 +7,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with: { components: clippy, rustfmt }
-      - run: cargo fmt --check
-      - run: cargo clippy --features alpine -- -D warnings
-
-  test:
-    needs: [lint]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test
-
-  build-rust:
-    needs: [test]
-    strategy:
-      matrix:
-        arch: [x86_64]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.arch }}-unknown-linux-musl
-
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target
-          key: ${{ runner.os }}-cargo-alpine-${{ hashFiles('Cargo.lock', 'src/**/*.rs') }}
-          restore-keys: ${{ runner.os }}-cargo-alpine-
-
-      - name: Build static binary
-        run: cargo build --release --target ${{ matrix.arch }}-unknown-linux-musl --features alpine
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rust-bin-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}-unknown-linux-musl/release/fix-automation
-          retention-days: 1
+  rust-ci:
+    uses: ./.github/workflows/rust-ci.yml
 
   build-iso:
-    needs: [build-rust]
+    needs: [rust-ci]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          name: rust-bin-x86_64
+          name: rust-bin-x86_64-alpine
           path: target/x86_64-unknown-linux-musl/release/
 
-      - name: Build Alpine ISO in Docker
+      - name: mark binary executable
+        run: chmod +x target/x86_64-unknown-linux-musl/release/fix-automation
+
+      - name: build Alpine ISO in Docker
         run: |
           docker build -t fix-automation-builder -f dist/alpine/Dockerfile .
           docker run --rm --privileged \
@@ -78,7 +34,7 @@ jobs:
             fix-automation-builder \
             sh /build/dist/alpine/build.sh --arch x86_64
 
-      - name: Verify ISO contents
+      - name: verify ISO contents
         run: |
           xorriso -indev dist/alpine/output/fix-automation-x86_64-alpine.iso -print 2>&1 | head -40
           echo "---"
@@ -98,12 +54,12 @@ jobs:
         with:
           name: fix-automation-x86_64-alpine.iso
 
-      - name: Install QEMU deps
+      - name: install QEMU + OVMF
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 ovmf
 
-      - name: Boot test (UEFI)
+      - name: boot test UEFI
         run: |
           OVMF=$(find /usr/share -name "OVMF.4m.fd" 2>/dev/null | head -1)
           [ -z "$OVMF" ] && OVMF=$(find /usr/share -name "OVMF.fd" 2>/dev/null | head -1)
@@ -113,21 +69,65 @@ jobs:
             -cdrom fix-automation-x86_64-alpine.iso \
             -m 512M -machine q35 -nographic \
             -bios "$OVMF" \
-            -no-reboot -accel tcg 2>&1 | tee serial.log || true
-          grep -q "Run /init as init process" serial.log && echo "PASS" || (echo "FAIL: kernel did not start init"; cat serial.log; exit 1)
+            -no-reboot -accel tcg 2>&1 | tee serial-uefi.log || true
+          grep -q "Run /init as init process" serial-uefi.log \
+            && echo "UEFI PASS" \
+            || (echo "UEFI FAIL"; cat serial-uefi.log; exit 1)
+
+      - name: boot test BIOS
+        run: |
+          timeout 30 qemu-system-x86_64 \
+            -cdrom fix-automation-x86_64-alpine.iso \
+            -m 512M -machine pc -nographic \
+            -no-reboot -accel tcg 2>&1 | tee serial-bios.log || true
+          grep -q "Run /init as init process" serial-bios.log \
+            && echo "BIOS PASS" \
+            || (echo "BIOS FAIL"; cat serial-bios.log; exit 1)
+
+      - name: check binary is present in ISO
+        run: |
+          isoinfo -l -i fix-automation-x86_64-alpine.iso 2>/dev/null \
+            | grep -qi "fix-automation" \
+            && echo "BINARY PRESENT" \
+            || echo "WARNING: could not verify binary in ISO listing"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: serial-logs-alpine
+          path: |
+            serial-uefi.log
+            serial-bios.log
+          retention-days: 3
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
     needs: [qemu-boot]
     runs-on: ubuntu-latest
-    permissions: { contents: write }
+    permissions:
+      contents: write
+
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v4
         with:
           name: fix-automation-x86_64-alpine.iso
 
+      - name: generate changelog
+        uses: orhun/git-cliff-action@v3
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --latest --strip all
+        env:
+          OUTPUT: /tmp/release_notes.txt
+
       - uses: softprops/action-gh-release@v2
         with:
+          body_path: /tmp/release_notes.txt
           files: fix-automation-x86_64-alpine.iso
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
