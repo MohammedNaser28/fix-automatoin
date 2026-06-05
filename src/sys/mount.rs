@@ -93,7 +93,32 @@ pub fn mount_bind() {
 
 pub fn umount(mount_dir: &str) {
     #[cfg(feature = "alpine")]
-    nix::mount::umount(mount_dir).expect("umount failed");
+    {
+        // Recursive unmount by parsing /proc/mounts and unmounting in reverse order
+        let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
+        let mut submounts: Vec<&str> = mounts
+            .lines()
+            .filter_map(|line| {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let mp = parts[1];
+                    if mp.starts_with(mount_dir) && mp != mount_dir {
+                        Some(mp)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+        // Unmount deepest first
+        submounts.sort_by(|a, b| b.len().cmp(&a.len()));
+        for mp in &submounts {
+            let _ = nix::mount::umount(Path::new(mp));
+        }
+        nix::mount::umount(mount_dir).expect("umount failed");
+    }
 
     #[cfg(not(feature = "alpine"))]
     {
