@@ -70,7 +70,7 @@ fn get_disks_lsblk() -> Vec<DiskInfo> {
     let mut disks = Vec::new();
 
     for dev in decoded.blockdevices {
-        let has_children = dev.children.as_ref().map_or(false, |c| !c.is_empty());
+        let has_children = dev.children.as_ref().is_some_and(|c| !c.is_empty());
 
         if !has_children {
             let is_efi = dev.fstype.as_deref() == Some("vfat");

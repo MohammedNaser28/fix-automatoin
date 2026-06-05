@@ -123,6 +123,7 @@ impl LogLine {
             text: t.into(),
         }
     }
+    #[allow(dead_code)]
     pub fn output(t: impl Into<String>) -> Self {
         Self {
             kind: LogKind::Output,
@@ -192,6 +193,7 @@ pub struct App {
 
     // Result & Export
     pub result_cursor: usize,
+    #[allow(dead_code)]
     pub export_cursor: usize,
 }
 

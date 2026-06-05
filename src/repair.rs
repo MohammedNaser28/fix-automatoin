@@ -95,7 +95,7 @@ fn run_grub_repair(
     tx: &Sender<LogLine>,
     distro: &dyn crate::sys::distros::Distro,
     is_uefi: bool,
-    efi: Option<&DiskInfo>,
+    _efi: Option<&DiskInfo>,
 ) {
     macro_rules! send {
         ($line:expr) => {{
@@ -126,8 +126,8 @@ fn run_grub_repair(
 pub fn run_diagnosis(
     tx: Sender<LogLine>,
     root: DiskInfo,
-    efi: Option<DiskInfo>,
-    is_uefi: bool,
+    _efi: Option<DiskInfo>,
+    _is_uefi: bool,
     disks: Vec<DiskInfo>,
 ) {
     macro_rules! send {
