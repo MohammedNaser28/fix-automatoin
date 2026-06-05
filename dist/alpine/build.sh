@@ -195,16 +195,24 @@ if [ ! -f "$ISO_DIR/boot/grub/bootx64.efi" ]; then
     err "bootx64.efi not found at $ISO_DIR/boot/grub/bootx64.efi — grub-mkstandalone failed"
 fi
 
-# Produce BIOS bootloader image via grub-mkstandalone (BIOS legacy boot)
+# Produce BIOS bootloader image via grub-mkimage + cdboot.img
+# grub-mkstandalone for i386-pc fails because core.img exceeds the 480KB embed limit.
+# Instead, create a minimal core.img (just enough to reach the ISO filesystem and load
+# the rest) and concatenate it with GRUB's cdboot.img first-stage loader. Additional
+# modules are loaded from /boot/grub/i386-pc/ on the ISO at runtime.
 info "  Creating BIOS boot image ..."
-grub-mkstandalone \
+GRUB_PC_DIR="/usr/lib/grub/i386-pc"
+grub-mkimage \
     --format=i386-pc \
-    --output="$ISO_DIR/boot/grub/boot.img" \
-    --modules="part_msdos iso9660 linux normal configfile search serial terminal all_video gfxterm gfxmenu png fat reboot halt" \
-    "boot/grub/grub.cfg=$GRUB_CFG"
+    --output="$ISO_DIR/boot/grub/core.img" \
+    --prefix=/boot/grub \
+    biosdisk iso9660 part_msdos linux normal configfile search serial terminal reboot halt
+
+cat "$GRUB_PC_DIR/cdboot.img" "$ISO_DIR/boot/grub/core.img" > "$ISO_DIR/boot/grub/boot.img"
+cp -r "$GRUB_PC_DIR" "$ISO_DIR/boot/grub/i386-pc"
 
 if [ ! -f "$ISO_DIR/boot/grub/boot.img" ]; then
-    err "boot.img not found at $ISO_DIR/boot/grub/boot.img — grub-mkstandalone (i386-pc) failed"
+    err "boot.img not found at $ISO_DIR/boot/grub/boot.img — grub-mkimage (i386-pc) failed"
 fi
 
 # Build hybrid BIOS+UEFI ISO with xorriso
