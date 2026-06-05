@@ -48,7 +48,7 @@ numfmt_to_iec() {
 [ "$(id -u)" -eq 0 ] || err "Must be run as root"
 [ -f "$BINARY_PATH" ] || err "Binary not found at $BINARY_PATH — build it first: cargo build --release --target ${ARCH}-unknown-linux-musl --features alpine"
 command -v xorriso  >/dev/null || err "xorriso not found — install xorriso"
-command -v grub-mkstandalone >/dev/null || err "grub-mkstandalone not found — install grub2"
+command -v grub-mkrescue >/dev/null || err "grub-mkrescue not found — install grub2"
 command -v wget      >/dev/null || err "wget not found"
 
 mkdir -p "$OUTPUT_DIR"
@@ -168,8 +168,12 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 8: Build hybrid ISO
+# Step 8: Build hybrid BIOS+UEFI ISO via grub-mkrescue
 # ══════════════════════════════════════════════════════════════════════════════
+# grub-mkrescue handles both BIOS (cdboot.img + core.img) and UEFI (FAT EFI
+# image with BOOTX64.EFI) boot entries internally, avoiding the 480KB i386-pc
+# core image limit that grub-mkstandalone hits.  The theme is placed on the ISO
+# filesystem so it's accessible from both BIOS (iso9660) and UEFI (ISO root).
 info "Building ISO ..."
 ISO_DIR="$STAGING_DIR/iso"
 mkdir -p "$ISO_DIR/boot/grub"
@@ -181,75 +185,21 @@ cp "$STAGING_DIR/initramfs.cpio.gz" "$ISO_DIR/boot/initramfs.cpio.gz"
 # Copy grub.cfg
 cp "$GRUB_CFG" "$ISO_DIR/boot/grub/grub.cfg"
 
-# Produce EFI bootloader image via grub-mkstandalone (UEFI only)
-info "  Creating EFI boot image ..."
+# Copy theme (accessible to both BIOS and UEFI on ISO filesystem)
 THEME_DIR="$(cd "$(dirname "$0")" && pwd)/theme"
-grub-mkstandalone \
-    --format=x86_64-efi \
-    --output="$ISO_DIR/boot/grub/bootx64.efi" \
-    --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal relocator all_video gfxterm gfxmenu video video_bochs" \
-    "boot/grub/grub.cfg=$GRUB_CFG"
+mkdir -p "$ISO_DIR/boot/grub/themes/fix-automation"
+cp "$THEME_DIR"/* "$ISO_DIR/boot/grub/themes/fix-automation/"
 
-# Verify bootloader exists
-if [ ! -f "$ISO_DIR/boot/grub/bootx64.efi" ]; then
-    err "bootx64.efi not found at $ISO_DIR/boot/grub/bootx64.efi — grub-mkstandalone failed"
-fi
-
-# Produce BIOS bootloader image via grub-mkimage + cdboot.img
-# grub-mkstandalone for i386-pc fails because core.img exceeds the 480KB embed limit.
-# Instead, create a minimal core.img (just enough to reach the ISO filesystem and load
-# the rest) and concatenate it with GRUB's cdboot.img first-stage loader. Additional
-# modules are loaded from /boot/grub/i386-pc/ on the ISO at runtime.
-info "  Creating BIOS boot image ..."
-GRUB_PC_DIR="/usr/lib/grub/i386-pc"
-grub-mkimage \
-    --format=i386-pc \
-    --output="$ISO_DIR/boot/grub/core.img" \
-    --prefix=/boot/grub \
-    biosdisk iso9660 part_msdos linux normal configfile search serial terminal reboot halt
-
-cat "$GRUB_PC_DIR/cdboot.img" "$ISO_DIR/boot/grub/core.img" > "$ISO_DIR/boot/grub/boot.img"
-cp -r "$GRUB_PC_DIR" "$ISO_DIR/boot/grub/i386-pc"
-
-if [ ! -f "$ISO_DIR/boot/grub/boot.img" ]; then
-    err "boot.img not found at $ISO_DIR/boot/grub/boot.img — grub-mkimage (i386-pc) failed"
-fi
-
-# Build hybrid BIOS+UEFI ISO with xorriso
-# BIOS boots from boot.img (El Torito no-emulation entry), UEFI boots from
-# FAT filesystem image containing GRUB EFI binary, kernel, initramfs, and theme.
-# Kernel + initramfs are also on the ISO filesystem so both boot paths work.
+# Build hybrid ISO with grub-mkrescue
 OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
-EFI_IMG="$STAGING_DIR/efi.img"
-info "  Creating FAT EFI boot image ..."
-dd if=/dev/zero of="$EFI_IMG" bs=1M count=32 2>/dev/null
-mkfs.fat -F 16 "$EFI_IMG" >/dev/null 2>&1
-mmd -i "$EFI_IMG" ::EFI ::EFI/BOOT ::boot
-mmd -i "$EFI_IMG" ::boot/grub ::boot/grub/themes ::boot/grub/themes/fix-automation
-mcopy -i "$EFI_IMG" "$ISO_DIR/boot/grub/bootx64.efi" ::EFI/BOOT/BOOTX64.EFI
-mcopy -i "$EFI_IMG" "$ISO_DIR/boot/vmlinuz"           ::boot/vmlinuz
-mcopy -i "$EFI_IMG" "$ISO_DIR/boot/initramfs.cpio.gz"  ::boot/initramfs.cpio.gz
-# Copy fix-automation theme
-for f in "$THEME_DIR"/*; do
-    mcopy -i "$EFI_IMG" "$f" ::boot/grub/themes/fix-automation/
-done
-ok "EFI boot image: $(numfmt_to_iec $(stat -c%s "$EFI_IMG"))"
-
-# Copy EFI image into ISO tree for xorriso to use as boot entry
-cp "$EFI_IMG" "$ISO_DIR/boot/grub/efi.img"
-
-info "  Running xorriso ..."
-xorriso -as mkisofs \
-    -iso-level 3 -rock -joliet \
-    -b boot/grub/boot.img \
-    -no-emul-boot \
-    -boot-load-size 4 \
-    -eltorito-alt-boot \
-    -e boot/grub/efi.img \
-    -no-emul-boot \
-    -volid "FIX_AUTOMATION" \
-    -o "$OUTPUT_ISO" \
-    "$ISO_DIR"
+info "  Running grub-mkrescue ..."
+grub-mkrescue \
+    --output="$OUTPUT_ISO" \
+    --modules="biosdisk iso9660 part_msdos linux normal configfile search serial terminal reboot halt" \
+    --install-modules="all_video gfxterm gfxmenu png video video_bochs part_gpt fat relocator" \
+    --locales="" \
+    "$ISO_DIR" \
+    -- -volid "FIX_AUTOMATION"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Done
