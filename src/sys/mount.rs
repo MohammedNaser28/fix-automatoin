@@ -113,7 +113,7 @@ pub fn umount(mount_dir: &str) {
             })
             .collect();
         // Unmount deepest first
-        submounts.sort_by(|a, b| b.len().cmp(&a.len()));
+        submounts.sort_by_key(|b| std::cmp::Reverse(b.len()));
         for mp in &submounts {
             let _ = nix::mount::umount(Path::new(mp));
         }
