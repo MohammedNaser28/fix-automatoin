@@ -126,6 +126,13 @@ jobs:
           cp buildroot/output/images/rootfs.cpio.gz iso-root/EFI/BOOT/
           cp ${{ steps.efi.outputs.path }}           iso-root/EFI/BOOT/BOOTX64.EFI
 
+          # Copy GRUB theme (available for manual loading or Ventoy users)
+          mkdir -p iso-root/boot/grub/themes/fix-automation
+          cp dist/grub-theme/*.png dist/grub-theme/*.pf2 \
+             iso-root/boot/grub/themes/fix-automation/
+          cp dist/grub-theme/theme-buildroot.txt \
+             iso-root/boot/grub/themes/fix-automation/theme.txt
+
           # GRUB config for ISO boot (EFI + BIOS fallback via grub-pc-bin)
           cat > iso-root/boot/grub/grub.cfg << 'EOF'
           set timeout=5
