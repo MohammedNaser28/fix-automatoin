@@ -187,7 +187,7 @@ THEME_DIR="$(cd "$(dirname "$0")" && pwd)/theme"
 grub-mkstandalone \
     --format=x86_64-efi \
     --output="$ISO_DIR/boot/grub/bootx64.efi" \
-    --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal relocator all_video gfxterm gfxmenu gfxmode video video_bochs" \
+    --modules="part_gpt part_msdos fat iso9660 linux normal configfile search serial terminal relocator all_video gfxterm gfxmenu video video_bochs" \
     "boot/grub/grub.cfg=$GRUB_CFG"
 
 # Verify bootloader exists
