@@ -98,6 +98,10 @@ jobs:
           insmod all_video
           insmod gfxterm
           insmod png
+          if [ -e /boot/grub/themes/fix-automation/theme.txt ]; then
+              set theme=/boot/grub/themes/fix-automation/theme.txt
+              terminal_output gfxterm
+          fi
 
           menuentry "Fix-Automation Rescue (Buildroot)" {
               linux  /EFI/BOOT/bzImage console=tty0 loglevel=7 earlycon=efifb fbcon=nodefer
