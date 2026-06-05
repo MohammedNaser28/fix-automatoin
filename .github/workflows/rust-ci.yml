@@ -1,0 +1,91 @@
+name: Rust CI
+
+on:
+  workflow_call:
+    outputs:
+      cache-key:
+        description: "Cargo target cache key for downstream jobs"
+        value: ${{ jobs.build-rust.outputs.cache-key }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo clippy --features alpine -- -D warnings
+      - run: cargo test
+
+  build-rust:
+    needs: [lint-test]
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.value }}
+    strategy:
+      matrix:
+        features: [default, alpine]
+        include:
+          - features: default
+            artifact: rust-bin-x86_64-default
+            flags: ""
+          - features: alpine
+            artifact: rust-bin-x86_64-alpine
+            flags: "--features alpine"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: cache cargo target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-musl-${{ matrix.features }}-${{ hashFiles('Cargo.lock', 'src/**/*.rs') }}
+          restore-keys: ${{ runner.os }}-cargo-target-musl-${{ matrix.features }}-
+
+      - name: compute cache key output
+        id: cache-key
+        run: echo "value=${{ runner.os }}-cargo-target-musl-${{ matrix.features }}-${{ hashFiles('Cargo.lock', 'src/**/*.rs') }}" >> $GITHUB_OUTPUT
+
+      - name: build static binary
+        run: cargo build --release --target x86_64-unknown-linux-musl ${{ matrix.flags }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: target/x86_64-unknown-linux-musl/release/fix-automation
+          retention-days: 3
