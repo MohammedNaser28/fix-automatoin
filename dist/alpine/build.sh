@@ -195,7 +195,6 @@ OUTPUT_ISO="${OUTPUT_DIR}/fix-automation-${ARCH}-alpine.iso"
 info "  Running grub-mkrescue ..."
 grub-mkrescue \
     --output="$OUTPUT_ISO" \
-    --install-modules="all_video gfxterm gfxmenu png video video_bochs part_gpt fat relocator" \
     --locales="" \
     "$ISO_DIR" \
     -- -volid "FIX_AUTOMATION"
