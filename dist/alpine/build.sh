@@ -105,7 +105,41 @@ printf "127.0.0.1 localhost\n::1 localhost\n127.0.1.1 rescue\n" > "$STAGING_DIR/
 : > "$STAGING_DIR/rootfs/etc/fstab"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 5: Build initramfs
+# Step 5: Bundle kernel modules for bochs-drm (QEMU VGA framebuffer)
+# ══════════════════════════════════════════════════════════════════════════════
+info "Bundling kernel modules (bochs-drm + deps) ..."
+MODULES_DIR="$STAGING_DIR/rootfs/modules"
+mkdir -p "$MODULES_DIR"
+
+# Find kernel version from installed modules
+KERNEL_VER=$(ls /lib/modules/ 2>/dev/null | head -1)
+if [ -z "$KERNEL_VER" ]; then
+    warn "No kernel modules found in /lib/modules/ — skipping module bundling"
+else
+    KERNEL_MODDIR="/lib/modules/${KERNEL_VER}/kernel"
+    MODULE_DEPS="
+        drivers/char/agp/agpgart
+        drivers/gpu/drm/drm
+        drivers/gpu/drm/drm_kms_helper
+        drivers/gpu/drm/ttm/ttm
+        drivers/gpu/drm/drm_ttm_helper
+        drivers/gpu/drm/drm_vram_helper
+        drivers/gpu/drm/tiny/bochs
+    "
+    for relpath in $MODULE_DEPS; do
+        src="${KERNEL_MODDIR}/${relpath}.ko.gz"
+        dst="${MODULES_DIR}/$(basename ${relpath}).ko"
+        if [ -f "$src" ]; then
+            gunzip -c "$src" > "$dst"
+            ok "  Module: $(basename ${relpath}).ko ($(numfmt_to_iec $(stat -c%s "$dst")))"
+        else
+            warn "  Module not found: ${relpath}.ko.gz"
+        fi
+    done
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Step 6: Build initramfs
 # ══════════════════════════════════════════════════════════════════════════════
 info "Building initramfs ..."
 (
@@ -116,7 +150,7 @@ INITRAMFS_SIZE=$(stat -c%s "$STAGING_DIR/initramfs.cpio.gz")
 ok "Initramfs: $(numfmt_to_iec $INITRAMFS_SIZE)"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 6: Get kernel (pre-installed by Dockerfile at /vmlinuz)
+# Step 7: Get kernel (pre-installed by Dockerfile at /vmlinuz)
 # ══════════════════════════════════════════════════════════════════════════════
 info "Fetching kernel ..."
 if [ -f "$VMLINUZ_PATH" ]; then
@@ -134,7 +168,7 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 7: Build hybrid ISO
+# Step 8: Build hybrid ISO
 # ══════════════════════════════════════════════════════════════════════════════
 info "Building ISO ..."
 ISO_DIR="$STAGING_DIR/iso"

@@ -15,6 +15,7 @@ pub fn init_system() -> Result<(), Box<dyn std::error::Error>> {
     IS_INIT.store(true, Ordering::SeqCst);
 
     mount_fs()?;
+    load_modules()?;
     setup_console()?;
     set_controlling_tty()?;
     setup_signals()?;
@@ -42,6 +43,45 @@ fn mount_fs() -> Result<(), Box<dyn std::error::Error>> {
         Err(Errno::EBUSY) => {} // kernel auto-mounted devtmpfs — fine
         Err(e) => return Err(e.into()),
         Ok(_) => {}
+    }
+
+    Ok(())
+}
+
+fn load_modules() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = Path::new("/modules");
+    if !dir.is_dir() {
+        return Ok(());
+    }
+
+    for name in &[
+        "agpgart",
+        "drm",
+        "drm_kms_helper",
+        "ttm",
+        "drm_ttm_helper",
+        "drm_vram_helper",
+        "bochs",
+    ] {
+        let path = dir.join(format!("{name}.ko"));
+        let data = match std::fs::read(&path) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let ret = unsafe {
+            libc::syscall(
+                libc::SYS_init_module,
+                data.as_ptr(),
+                data.len(),
+                std::ptr::null::<libc::c_char>(),
+            )
+        };
+        if ret != 0 {
+            let err = std::io::Error::last_os_error();
+            if err.raw_os_error() != Some(libc::EEXIST) {
+                eprintln!("init: load {name}: {}", err);
+            }
+        }
     }
 
     Ok(())
