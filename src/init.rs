@@ -23,8 +23,8 @@ pub fn init_system() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn mount_fs() -> Result<(), Box<dyn std::error::Error>> {
-    use nix::mount::{MsFlags, mount};
     use nix::errno::Errno;
+    use nix::mount::{MsFlags, mount};
 
     let flags = MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV;
 
@@ -43,9 +43,6 @@ fn mount_fs() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => return Err(e.into()),
         Ok(_) => {}
     }
-
-    Ok(())
-}
 
     Ok(())
 }
