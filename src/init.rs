@@ -15,10 +15,37 @@ pub fn init_system() -> Result<(), Box<dyn std::error::Error>> {
     IS_INIT.store(true, Ordering::SeqCst);
 
     mount_fs()?;
-    load_modules()?;
-    setup_console()?;
-    set_controlling_tty()?;
-    setup_signals()?;
+
+    let s = serial_init().unwrap_or(-1);
+    serial_fd(s, "init: start");
+
+    if let Err(e) = load_modules(s) {
+        serial_fd(s, &format!("init: load_modules: {e}"));
+        return Err(e);
+    }
+    serial_fd(s, "init: modules done");
+
+    if let Err(e) = setup_console() {
+        serial_fd(s, &format!("init: setup_console: {e}"));
+        return Err(e);
+    }
+    if let Err(e) = set_controlling_tty() {
+        serial_fd(s, &format!("init: set_controlling_tty: {e}"));
+        return Err(e);
+    }
+    if let Err(e) = setup_signals() {
+        serial_fd(s, &format!("init: setup_signals: {e}"));
+        return Err(e);
+    }
+
+    // Quick sanity: does /dev/fb0 exist?
+    if std::path::Path::new("/dev/fb0").exists() {
+        serial_fd(s, "init: /dev/fb0 OK");
+    } else {
+        serial_fd(s, "init: /dev/fb0 missing");
+    }
+
+    serial_fd(s, "init: done");
 
     Ok(())
 }
@@ -48,40 +75,34 @@ fn mount_fs() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn load_module_via_fd(data: &[u8], flags: i32) -> Result<(), std::io::Error> {
-    use std::os::fd::{AsRawFd, FromRawFd};
-
-    let fd = unsafe { libc::syscall(libc::SYS_memfd_create, c"mod".as_ptr(), 0_usize) as i32 };
-    if fd < 0 {
-        return Err(std::io::Error::last_os_error());
+fn serial_init() -> Option<i32> {
+    use std::os::fd::AsRawFd;
+    if let Ok(fd) = nix::fcntl::open(
+        "/dev/ttyS0",
+        nix::fcntl::OFlag::O_WRONLY,
+        nix::sys::stat::Mode::empty(),
+    ) {
+        Some(fd.as_raw_fd())
+    } else {
+        None
     }
-    let mut fd = unsafe { std::fs::File::from_raw_fd(fd) };
-    use std::io::Write;
-    fd.write_all(data)?;
-    fd.flush()?;
-    let raw_fd = fd.as_raw_fd();
-    let ret = unsafe {
-        libc::syscall(
-            libc::SYS_finit_module,
-            raw_fd,
-            std::ptr::null::<libc::c_char>(),
-            flags as libc::c_int,
-        )
-    };
-    drop(fd);
-    if ret != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(())
 }
 
-fn load_modules() -> Result<(), Box<dyn std::error::Error>> {
+fn serial_fd(fd: i32, msg: &str) {
+    unsafe {
+        let _ = libc::write(fd, msg.as_ptr() as *const libc::c_void, msg.len());
+        let _ = libc::write(fd, c"\n".as_ptr() as *const libc::c_void, 2usize);
+    }
+}
+
+fn load_modules(s: i32) -> Result<(), Box<dyn std::error::Error>> {
     let dir = Path::new("/modules");
     if !dir.is_dir() {
+        serial_fd(s, "init: no /modules dir");
         return Ok(());
     }
 
-    const IGNORE_MODVERSIONS: i32 = 1;
+    serial_fd(s, "init: loading modules...");
 
     for name in &[
         "agpgart",
@@ -93,22 +114,26 @@ fn load_modules() -> Result<(), Box<dyn std::error::Error>> {
         "bochs",
     ] {
         let path = dir.join(format!("{name}.ko"));
-        let data = match std::fs::read(&path) {
-            Ok(d) => d,
-            Err(_) => {
-                continue;
-            }
-        };
-
-        match load_module_via_fd(&data, 0) {
-            Ok(()) => continue,
-            Err(e) if e.raw_os_error() == Some(libc::EEXIST) => continue,
-            Err(_) => {}
+        if !path.exists() {
+            serial_fd(s, &format!("init: {name}: file not found"));
+            continue;
         }
 
-        match load_module_via_fd(&data, IGNORE_MODVERSIONS) {
-            Ok(()) => eprintln!("init: loaded {name} (ignored modversions)"),
-            Err(e) => eprintln!("init: load {name}: {e}"),
+        #[allow(clippy::collapsible_if)]
+        if let Ok(status) = std::process::Command::new("/busybox")
+            .args(["insmod", &path.to_string_lossy()])
+            .status()
+        {
+            if status.success() {
+                serial_fd(s, &format!("init: {name}: OK"));
+            } else {
+                serial_fd(
+                    s,
+                    &format!("init: {name}: busybox exit={:?}", status.code()),
+                );
+            }
+        } else {
+            serial_fd(s, &format!("init: {name}: failed to run busybox"));
         }
     }
 
