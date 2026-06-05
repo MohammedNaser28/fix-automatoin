@@ -40,12 +40,19 @@ cargo build --release --target x86_64-unknown-linux-musl --features alpine
 ./qemu-test-full.sh
 ```
 
-### Distribution builds
+## Variants: Buildroot vs Alpine
 
-| Variant | Output | Build command |
-|---------|--------|---------------|
-| **Buildroot** | `fix-automation-x86_64-buildroot.iso` + `grub-rescue-usb.zip` | CI or manual Buildroot build |
-| **Alpine** | `fix-automation-x86_64-alpine.iso` | `docker build -f dist/alpine/Dockerfile .` |
+Two bootable ISO variants are built from this repo:
+
+| Variant | Base | Output | Best for |
+|---------|------|--------|----------|
+| **Buildroot** | Buildroot 2025.02 + musl + GRUB | `.iso` + `.zip` | General rescue — smaller image, direct GRUB control, BIOS+UEFI |
+| **Alpine** | Alpine Linux 3.21 + musl | `.iso` | Familiar Alpine env, larger package base, easier to extend |
+
+- **Buildroot** — a minimal initramfs-style image. Stripped down, boots fast, purpose-built for GRUB/fstab repair. Use this for everyday rescue.
+- **Alpine** — a full Alpine Linux ISO with the TUI running on top. Use this if you want a familiar Linux environment alongside the repair tool, or if you need to extend the image with packages.
+
+Both variants run the same Rust TUI binary; only the surrounding OS differs.
 
 ## Screens flow
 
@@ -56,19 +63,30 @@ Welcome → SelectRoot → SelectEfi → Confirm → ActionMenu → ExecLog → 
 ## Project structure
 
 ```
-src/
-├── main.rs          ← terminal init, event loop, render dispatch
-├── app.rs           ← App state, screens, log pipeline
-├── init.rs          ← first-boot init (run before the TUI)
-├── repair.rs        ← background repair thread
-├── screens/         ← one file per screen
-│   ├── welcome.rs   ├── confirm.rs    ├── exec_log.rs
-│   ├── select_root.rs │ action_menu.rs  ├── log_export.rs
-│   └── select_efi.rs  └── results.rs
-├── sys/             ← system calls (mount, grub, fstab, blkdev, chroot, distro)
-└── ui/              ← theme + shared widgets
-    ├── theme.rs
-    └── widgets.rs
+fix-automation/
+├── src/                  ← Rust TUI application
+│   ├── main.rs           ← terminal init, event loop, render dispatch
+│   ├── app.rs            ← App state, screens, log pipeline
+│   ├── init.rs           ← first-boot init (run before the TUI)
+│   ├── repair.rs         ← background repair thread
+│   ├── screens/          ← one file per screen
+│   ├── sys/              ← system calls (mount, grub, fstab, blkdev...)
+│   └── ui/               ← theme colors + shared widgets
+│
+├── os-config/            ← Buildroot build configs
+│   ├── configs/          ← defconfig + kernel fragment
+│   ├── package/          ← Buildroot package recipe for fix-automation
+│   └── rootfs_overlay/   ← init scripts, inittab, network configs
+│
+├── dist/alpine/          ← Alpine Linux ISO builder
+│   ├── Dockerfile        ← Docker multistage build
+│   ├── build.sh          ← ISO construction script
+│   ├── grub.cfg          ← GRUB config for Alpine ISO
+│   ├── theme/            ← GRUB boot theme (png backgrounds, fonts)
+│   └── write-usb.sh      ← helper to write ISO to USB
+│
+├── .github/workflows/    ← CI/CD pipelines (Buildroot + Alpine)
+└── Cargo.toml
 ```
 
 ## Testing
@@ -90,3 +108,7 @@ Each workflow (`build-os.yaml`, `build-alpine.yaml`) boots the produced ISO unde
 ## Contributing
 
 PRs welcome. Keep commits focused, run `cargo fmt` and `cargo clippy` first.
+
+---
+
+Built by Mohammed Niri (OSC Linux Team) — Ain Shams University, 2025–2026.
