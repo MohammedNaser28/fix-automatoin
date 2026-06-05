@@ -48,11 +48,40 @@ fn mount_fs() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn load_module_via_fd(data: &[u8], flags: i32) -> Result<(), std::io::Error> {
+    use std::os::fd::{AsRawFd, FromRawFd};
+
+    let fd = unsafe { libc::syscall(libc::SYS_memfd_create, c"mod".as_ptr(), 0_usize) as i32 };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    let mut fd = unsafe { std::fs::File::from_raw_fd(fd) };
+    use std::io::Write;
+    fd.write_all(data)?;
+    fd.flush()?;
+    let raw_fd = fd.as_raw_fd();
+    let ret = unsafe {
+        libc::syscall(
+            libc::SYS_finit_module,
+            raw_fd,
+            std::ptr::null::<libc::c_char>(),
+            flags as libc::c_int,
+        )
+    };
+    drop(fd);
+    if ret != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 fn load_modules() -> Result<(), Box<dyn std::error::Error>> {
     let dir = Path::new("/modules");
     if !dir.is_dir() {
         return Ok(());
     }
+
+    const IGNORE_MODVERSIONS: i32 = 1;
 
     for name in &[
         "agpgart",
@@ -66,21 +95,20 @@ fn load_modules() -> Result<(), Box<dyn std::error::Error>> {
         let path = dir.join(format!("{name}.ko"));
         let data = match std::fs::read(&path) {
             Ok(d) => d,
-            Err(_) => continue,
-        };
-        let ret = unsafe {
-            libc::syscall(
-                libc::SYS_init_module,
-                data.as_ptr(),
-                data.len(),
-                std::ptr::null::<libc::c_char>(),
-            )
-        };
-        if ret != 0 {
-            let err = std::io::Error::last_os_error();
-            if err.raw_os_error() != Some(libc::EEXIST) {
-                eprintln!("init: load {name}: {}", err);
+            Err(_) => {
+                continue;
             }
+        };
+
+        match load_module_via_fd(&data, 0) {
+            Ok(()) => continue,
+            Err(e) if e.raw_os_error() == Some(libc::EEXIST) => continue,
+            Err(_) => {}
+        }
+
+        match load_module_via_fd(&data, IGNORE_MODVERSIONS) {
+            Ok(()) => eprintln!("init: loaded {name} (ignored modversions)"),
+            Err(e) => eprintln!("init: load {name}: {e}"),
         }
     }
 
