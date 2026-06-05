@@ -25,11 +25,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     // 3. Generate rows from the filtered dataset cleanly
     let rows = app.disks.iter().filter(|d| d.is_efi).map(|disk| {
-        let fstype_str = disk.fstype.as_deref().unwrap_or("—");
+        let fstype_str = disk.fstype.as_deref().unwrap_or("-");
         let contents_str = disk.contents.as_deref().unwrap_or("empty");
 
         Row::new(vec![
-            // Removed manual "▶ " so the table engine can draw it contextually
+            // Removed manual "> " so the table engine can draw it contextually
             Cell::from(format!("  {}\n  contents: {}", disk.name, contents_str)),
             Cell::from(format!("{}\n", disk.size)),
             Cell::from(format!("{}\n", fstype_str)).style(Style::default().fg(THEME.green)),
@@ -47,7 +47,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     )
     .block(Block::default().title("choose the EFI system partition (vfat, ~512MB)"))
     .row_highlight_style(Style::default().bg(THEME.selection).fg(THEME.orange))
-    .highlight_symbol("▶ "); // Dynamically renders the indicator arrow only on the selected row
+    .highlight_symbol("> "); // Dynamically renders the indicator arrow only on the selected row
 
     f.render_stateful_widget(table, chunks[1], &mut app.table_state);
 }

@@ -25,7 +25,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let header_lines = vec![
         Line::from(""),
         Line::from(Span::styled(
-            "✓",
+            "ok",
             Style::default()
                 .fg(THEME.green)
                 .add_modifier(Modifier::BOLD),
@@ -52,7 +52,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     for log in &app.log_lines {
         if log.kind == LogKind::Step {
             checklist.push(Line::from(vec![
-                Span::styled("  ✓ ", Style::default().fg(THEME.green)),
+                Span::styled("  ok ", Style::default().fg(THEME.green)),
                 Span::styled(log.text.clone(), Style::default().fg(THEME.comment)),
             ]));
         }
@@ -69,7 +69,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     f.render_widget(Paragraph::new(checklist), main_layout[1]);
 
     // ── Divider ───────────────────────────────────────────────────────────────
-    let divider = Paragraph::new("─".repeat(chunks[1].width as usize))
+    let divider = Paragraph::new("-".repeat(chunks[1].width as usize))
         .style(Style::default().fg(THEME.comment));
     f.render_widget(divider, main_layout[2]);
 
@@ -104,7 +104,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
                     .bg(THEME.selection)
                     .fg(THEME.cyan)
                     .add_modifier(Modifier::BOLD),
-                "▶ ",
+                "> ",
             )
         } else {
             (Style::default().fg(THEME.comment), "  ")

@@ -1,6 +1,6 @@
 use crate::app::{Action, LogLine};
 use crate::sys::blkdev::DiskInfo;
-/// Background repair thread — sends LogLine messages through `tx`.
+/// Background repair thread - sends LogLine messages through `tx`.
 /// All blocking system calls live here so the TUI remains responsive.
 use std::sync::mpsc::Sender;
 
@@ -21,14 +21,14 @@ pub fn run(
     send!(LogLine::step("mounting root partition"));
     let root_dev = format!("/dev/{}", root.name);
     crate::sys::mount::mount(&root_dev);
-    send!(LogLine::ok(format!("mounted {} → /mnt", root_dev)));
+    send!(LogLine::ok(format!("mounted {} -> /mnt", root_dev)));
 
     // ── Step 2: Mount EFI ─────────────────────────────────────────────────────
     if is_uefi && let Some(ref efi_disk) = efi {
         send!(LogLine::step("mounting EFI partition"));
         let efi_dev = format!("/dev/{}", efi_disk.name);
         crate::sys::mount::mount_efi(&efi_dev);
-        send!(LogLine::ok(format!("mounted {} → /mnt/boot/efi", efi_dev)));
+        send!(LogLine::ok(format!("mounted {} -> /mnt/boot/efi", efi_dev)));
     }
 
     // ── Step 3: Bind mounts ───────────────────────────────────────────────────
@@ -59,7 +59,7 @@ pub fn run(
                 &live_devs,
             ) {
                 Ok(issues) if issues.is_empty() => {
-                    send!(LogLine::ok("fstab validated — no issues found"));
+                    send!(LogLine::ok("fstab validated - no issues found"));
                 }
                 Ok(issues) => {
                     send!(LogLine::warn(format!(
@@ -74,7 +74,7 @@ pub fn run(
         }
         Action::OpenChrootShell => {
             send!(LogLine::warn(
-                "chroot shell — switch to TTY and run: chroot /mnt"
+                "chroot shell - switch to TTY and run: chroot /mnt"
             ));
         }
         _ => {
@@ -85,7 +85,7 @@ pub fn run(
     // ── Final: Unmount ────────────────────────────────────────────────────────
     send!(LogLine::step("unmounting all filesystems"));
     crate::sys::mount::umount("/mnt");
-    send!(LogLine::ok("repair complete — safe to reboot"));
+    send!(LogLine::ok("repair complete - safe to reboot"));
 
     send!(LogLine::done());
 }
@@ -140,7 +140,7 @@ pub fn run_diagnosis(
     send!(LogLine::step("mounting root partition"));
     let root_dev = format!("/dev/{}", root.name);
     crate::sys::mount::mount(&root_dev);
-    send!(LogLine::ok(format!("mounted {} → /mnt", root_dev)));
+    send!(LogLine::ok(format!("mounted {} -> /mnt", root_dev)));
 
     // ── Step 2: Detect distro ─────────────────────────────────────────────────
     send!(LogLine::step("detecting distribution"));

@@ -24,7 +24,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let mut lines: Vec<Line> = vec![
         Line::from(vec![
             Span::styled(action_label, Style::default().fg(THEME.foreground)),
-            Span::styled(" — ", Style::default().fg(THEME.comment)),
+            Span::styled(" - ", Style::default().fg(THEME.comment)),
             Span::styled(
                 distro.to_lowercase(),
                 Style::default()
@@ -40,20 +40,20 @@ pub fn render(f: &mut Frame, app: &mut App) {
         match log.kind {
             LogKind::Step => {
                 lines.push(Line::from(vec![
-                    Span::styled("▸ ", Style::default().fg(THEME.comment)),
+                    Span::styled("> ", Style::default().fg(THEME.comment)),
                     Span::styled(&log.text, Style::default().fg(THEME.comment)),
                 ]));
             }
             LogKind::Ok => {
                 if let Some(last) = lines.last_mut() {
                     last.spans
-                        .push(Span::styled("   ✓ done", Style::default().fg(THEME.green)));
+                        .push(Span::styled("   ok done", Style::default().fg(THEME.green)));
                 }
             }
             LogKind::Warn => {
                 if let Some(last) = lines.last_mut() {
                     last.spans.push(Span::styled(
-                        "   ⚠ warning",
+                        "   !! warning",
                         Style::default().fg(THEME.yellow),
                     ));
                 }
@@ -61,7 +61,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
             LogKind::Error => {
                 if let Some(last) = lines.last_mut() {
                     last.spans
-                        .push(Span::styled("   ✗ failed", Style::default().fg(THEME.red)));
+                        .push(Span::styled("   !! failed", Style::default().fg(THEME.red)));
                 }
             }
             _ => {}
@@ -107,7 +107,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
                 .title(" command output ")
                 .border_style(Style::default().fg(THEME.comment)),
         )
-        .style(Style::default().bg(ratatui::style::Color::Rgb(22, 27, 34))); // Darker bg for output box
+        .style(Style::default().bg(ratatui::style::Color::Black));
 
     f.render_widget(output_block, log_layout[1]);
 
@@ -129,11 +129,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
     };
 
     let progress_line = Line::from(vec![
-        Span::styled("█".repeat(filled_width), Style::default().fg(THEME.cyan)),
-        Span::styled("░".repeat(empty_width), Style::default().fg(THEME.comment)),
+        Span::styled("#".repeat(filled_width), Style::default().fg(THEME.cyan)),
+        Span::styled(".".repeat(empty_width), Style::default().fg(THEME.comment)),
         Span::styled(
             format!(
-                " step {} of {} · {}",
+                " step {} of {} - {}",
                 app.exec_step, app.exec_total, status_text
             ),
             Style::default().fg(THEME.comment),

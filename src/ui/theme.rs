@@ -13,14 +13,14 @@ pub struct Theme {
 }
 
 pub const THEME: Theme = Theme {
-    background: Color::Rgb(13, 17, 23),
-    cyan: Color::Rgb(121, 192, 255),
-    green: Color::Rgb(86, 211, 100),
-    yellow: Color::Rgb(227, 179, 65),
-    red: Color::Rgb(248, 81, 73),
-    purple: Color::Rgb(210, 168, 255),
-    orange: Color::Rgb(255, 166, 87),
-    comment: Color::Rgb(139, 148, 158),
-    foreground: Color::Rgb(230, 237, 243),
-    selection: Color::Rgb(31, 58, 95),
+    background: Color::Black,
+    cyan: Color::Cyan,
+    green: Color::Green,
+    yellow: Color::Yellow,
+    red: Color::Red,
+    purple: Color::Magenta,
+    orange: Color::LightRed,
+    comment: Color::DarkGray,
+    foreground: Color::White,
+    selection: Color::Blue,
 };

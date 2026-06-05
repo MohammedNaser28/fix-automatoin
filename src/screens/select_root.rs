@@ -34,7 +34,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     // Rows
     let rows = app.disks.iter().map(|disk| {
-        let fstype_str = disk.fstype.as_deref().unwrap_or("—");
+        let fstype_str = disk.fstype.as_deref().unwrap_or("-");
         let fstype_color = match fstype_str {
             "ext4" | "btrfs" | "xfs" => THEME.green,
             "ntfs" => THEME.red,
@@ -42,7 +42,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
             "vfat" => THEME.cyan,
             _ => THEME.foreground,
         };
-        let label_str = disk.label.clone().unwrap_or_else(|| "—".into());
+        let label_str = disk.label.clone().unwrap_or_else(|| "-".into());
 
         Row::new(vec![
             Cell::from(format!("  {}", disk.name)).style(Style::default().fg(THEME.foreground)),
@@ -70,7 +70,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
             .fg(THEME.cyan)
             .add_modifier(Modifier::BOLD),
     )
-    .highlight_symbol("▶ ");
+    .highlight_symbol("> ");
 
     f.render_stateful_widget(table, table_area, &mut app.table_state);
 }

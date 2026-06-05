@@ -21,7 +21,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .selected_root
         .as_ref()
         .map(|d| d.name.clone())
-        .unwrap_or_else(|| "—".into());
+        .unwrap_or_else(|| "-".into());
     let root_fs = app
         .selected_root
         .as_ref()
@@ -36,7 +36,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .selected_efi
         .as_ref()
         .map(|d| d.name.clone())
-        .unwrap_or_else(|| "—".into());
+        .unwrap_or_else(|| "-".into());
     let efi_fs = app
         .selected_efi
         .as_ref()
@@ -124,7 +124,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     let divider_width = chunks[1].width as usize;
     f.render_widget(
-        Paragraph::new("─".repeat(divider_width)).style(Style::default().fg(THEME.comment)),
+        Paragraph::new("-".repeat(divider_width)).style(Style::default().fg(THEME.comment)),
         button_layout[0],
     );
 

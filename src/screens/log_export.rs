@@ -57,12 +57,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
                 .title(" execution log ")
                 .border_style(Style::default().fg(THEME.comment)),
         )
-        .style(Style::default().bg(ratatui::style::Color::Rgb(22, 27, 34)));
+        .style(Style::default().bg(ratatui::style::Color::Black));
 
     f.render_widget(log_block, main_layout[1]);
 
     // ── Divider ───────────────────────────────────────────────────────────────
-    let divider = Paragraph::new("─".repeat(chunks[1].width as usize))
+    let divider = Paragraph::new("-".repeat(chunks[1].width as usize))
         .style(Style::default().fg(THEME.comment));
     f.render_widget(divider, main_layout[2]);
 
@@ -76,7 +76,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         ])
         .split(main_layout[3]);
 
-    let btn = Paragraph::new("\n▶ go back")
+    let btn = Paragraph::new("\n> go back")
         .alignment(Alignment::Center)
         .block(
             Block::default().borders(Borders::ALL).style(

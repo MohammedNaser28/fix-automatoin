@@ -14,7 +14,7 @@ pub fn get_ip() -> Option<String> {
         if line.starts_with("inet ") {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if let Some(addr) = parts.get(1) {
-                // Strip CIDR: "192.168.1.5/24" → "192.168.1.5"
+                // Strip CIDR: "192.168.1.5/24" -> "192.168.1.5"
                 let ip = addr.split('/').next().unwrap_or(addr);
                 return Some(ip.to_string());
             }

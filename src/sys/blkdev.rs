@@ -52,7 +52,7 @@ fn get_disks_lsblk() -> Vec<DiskInfo> {
     {
         Ok(o) => o,
         Err(e) => {
-            eprintln!("lsblk failed: {} — is util-linux installed?", e);
+            eprintln!("lsblk failed: {} - is util-linux installed?", e);
             return Vec::new();
         }
     };

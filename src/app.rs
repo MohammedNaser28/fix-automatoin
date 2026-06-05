@@ -74,8 +74,8 @@ impl Action {
             Action::FixGrubAndFstab => "recommended",
             Action::OpenChrootShell => "drop into chroot shell",
             Action::RestoreWindowsEfi => "recover from NTFS backup",
-            Action::PartitionManager => "create · delete · resize",
-            Action::ExportLogs => "QR code · paste URL",
+            Action::PartitionManager => "create - delete - resize",
+            Action::ExportLogs => "QR code - paste URL",
             Action::DiagnoseWithAI => "send logs to claude",
         }
     }
@@ -101,13 +101,13 @@ pub const ACTION_ITEMS: &[Option<Action>] = &[
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LogKind {
-    Step,   // ▸ gray  — step header
-    Output, // white  — command stdout/stderr
-    Ok,     // ✓ green
-    Warn,   // ⚠ yellow
-    Error,  // ✗ red
+    Step,   // > gray  - step header
+    Output, // white  - command stdout/stderr
+    Ok,     // ok green
+    Warn,   // !! yellow
+    Error,  // !! red
     DiagnosisResult(Vec<String>, Option<Action>),
-    Done, // internal signal — repair finished
+    Done, // internal signal - repair finished
 }
 
 #[derive(Debug, Clone)]

@@ -28,13 +28,13 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     // Top bar
     f.render_widget(
-        Paragraph::new("grub-rescue v0.1.0 — rescue USB")
+        Paragraph::new("grub-rescue v0.1.0 - rescue USB")
             .style(Style::default().bg(THEME.background).fg(THEME.comment)),
         chunks[0],
     );
 
     // Dividers
-    let divider = Paragraph::new("─".repeat(area.width as usize))
+    let divider = Paragraph::new("-".repeat(area.width as usize))
         .style(Style::default().bg(THEME.background).fg(THEME.comment));
     f.render_widget(divider.clone(), chunks[1]);
     f.render_widget(divider, chunks[3]);
@@ -50,20 +50,20 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     let network_line = match &app.network_info {
         Some(ip) => Line::from(vec![
-            Span::styled("✓ ", Style::default().fg(THEME.green)),
+            Span::styled("ok ", Style::default().fg(THEME.green)),
             Span::raw("network: "),
             Span::styled("DHCP acquired  ", Style::default().fg(THEME.yellow)),
             Span::styled(ip.clone(), Style::default().fg(THEME.comment)),
         ]),
         None => Line::from(vec![
-            Span::styled("✗ ", Style::default().fg(THEME.red)),
+            Span::styled("!! ", Style::default().fg(THEME.red)),
             Span::styled("no network detected", Style::default().fg(THEME.comment)),
         ]),
     };
 
     let scan_line = if app.scan_state == ScanState::Scanning {
         Line::from(vec![
-            Span::styled("⟳ ", Style::default().fg(THEME.yellow)),
+            Span::styled("~ ", Style::default().fg(THEME.yellow)),
             Span::styled(
                 "scanning block devices...",
                 Style::default().fg(THEME.yellow),
@@ -71,7 +71,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         ])
     } else {
         Line::from(vec![
-            Span::styled("✓ ", Style::default().fg(THEME.green)),
+            Span::styled("ok ", Style::default().fg(THEME.green)),
             Span::raw("found "),
             Span::styled(
                 disk_count.to_string(),
@@ -95,7 +95,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         scan_line,
         Line::from(""),
         Line::from(vec![
-            Span::styled("✓ ", Style::default().fg(THEME.green)),
+            Span::styled("ok ", Style::default().fg(THEME.green)),
             Span::raw("detected firmware: "),
             Span::styled(
                 firmware_label,
@@ -147,7 +147,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .split(footer_chunks[2]);
 
     f.render_widget(
-        Paragraph::new("continue →")
+        Paragraph::new("continue ->")
             .style(
                 Style::default()
                     .bg(THEME.selection)

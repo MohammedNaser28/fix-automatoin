@@ -67,7 +67,7 @@ fn mount_fs() -> Result<(), Box<dyn std::error::Error>> {
         MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
         None::<&str>,
     ) {
-        Err(Errno::EBUSY) => {} // kernel auto-mounted devtmpfs — fine
+        Err(Errno::EBUSY) => {} // kernel auto-mounted devtmpfs - fine
         Err(e) => return Err(e.into()),
         Ok(_) => {}
     }

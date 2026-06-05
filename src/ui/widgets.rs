@@ -27,7 +27,7 @@ pub fn draw_layout(f: &mut Frame, title: &str) -> Vec<Rect> {
 
     // Render Global Footer
     let footer =
-        Paragraph::new(" [Q] Quit · [P] Poweroff · [R] Reboot | [Enter] Next · [Esc] Back ").block(
+        Paragraph::new(" [Q] Quit - [P] Poweroff - [R] Reboot | [Enter] Next - [Esc] Back ").block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(THEME.comment),

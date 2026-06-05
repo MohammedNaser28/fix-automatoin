@@ -28,7 +28,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
                     .fg(THEME.purple)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(" · ", Style::default().fg(THEME.comment)),
+            Span::styled(" - ", Style::default().fg(THEME.comment)),
             Span::styled(
                 format!("/dev/{}", root_name),
                 Style::default().fg(THEME.cyan),
@@ -73,7 +73,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
                 };
 
                 let arrow = if is_selected {
-                    Span::styled("  ▶ ", Style::default().fg(THEME.orange))
+                    Span::styled("  > ", Style::default().fg(THEME.orange))
                 } else {
                     Span::raw("    ")
                 };
@@ -108,7 +108,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
-        "  [Tab/↑↓] navigate   [Enter] select   [Esc] back",
+        "  [Tab/^v] navigate   [Enter] select   [Esc] back",
         Style::default().fg(THEME.comment),
     )]));
 
