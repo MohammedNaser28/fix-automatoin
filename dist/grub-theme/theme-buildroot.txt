@@ -27,7 +27,7 @@ terminal-height: "100%"
     font = "Comfortaa Bold 24"
     color = "#dadada"
     align = "left"
-    text = "- ALPINE EDITION"
+    text = "- BUILDROOT EDITION"
 }
 
 + boot_menu {
@@ -51,10 +51,10 @@ terminal-height: "100%"
     left = 3%
     top = 95%
     height = 25
-    width = 600  
+    width = 600
     font = "Comfortaa Bold 18"
     color = "#dadada"
-    align = "left"  
+    align = "left"
     text = "@KEYMAP_SHORT@"
 }
 

@@ -205,13 +205,13 @@ info "  Creating FAT EFI boot image ..."
 dd if=/dev/zero of="$EFI_IMG" bs=1M count=32 2>/dev/null
 mkfs.fat -F 16 "$EFI_IMG" >/dev/null 2>&1
 mmd -i "$EFI_IMG" ::EFI ::EFI/BOOT ::boot
-mmd -i "$EFI_IMG" ::boot/grub ::boot/grub/themes ::boot/grub/themes/yorha
+mmd -i "$EFI_IMG" ::boot/grub ::boot/grub/themes ::boot/grub/themes/fix-automation
 mcopy -i "$EFI_IMG" "$ISO_DIR/boot/grub/bootx64.efi" ::EFI/BOOT/BOOTX64.EFI
 mcopy -i "$EFI_IMG" "$ISO_DIR/boot/vmlinuz"           ::boot/vmlinuz
 mcopy -i "$EFI_IMG" "$ISO_DIR/boot/initramfs.cpio.gz"  ::boot/initramfs.cpio.gz
-# Copy YoRHa theme
+# Copy fix-automation theme
 for f in "$THEME_DIR"/*; do
-    mcopy -i "$EFI_IMG" "$f" ::boot/grub/themes/yorha/
+    mcopy -i "$EFI_IMG" "$f" ::boot/grub/themes/fix-automation/
 done
 ok "EFI boot image: $(numfmt_to_iec $(stat -c%s "$EFI_IMG"))"
 

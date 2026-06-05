@@ -82,8 +82,38 @@ jobs:
           cp buildroot/output/images/bzImage        release/EFI/BOOT/
           cp buildroot/output/images/rootfs.cpio.gz release/EFI/BOOT/
           cp ${{ steps.efi.outputs.path }}           release/EFI/BOOT/BOOTX64.EFI
-          printf 'set timeout=5\nset default=0\nmenuentry "Fix-Automation Rescue" {\n    linux  /EFI/BOOT/bzImage console=tty0 loglevel=7 earlycon=efifb fbcon=nodefer\n    initrd /EFI/BOOT/rootfs.cpio.gz\n}\n' \
-            > release/EFI/BOOT/grub.cfg
+
+          # Copy GRUB theme
+          mkdir -p release/boot/grub/themes/fix-automation
+          cp dist/grub-theme/*.png dist/grub-theme/*.pf2 \
+             release/boot/grub/themes/fix-automation/
+          cp dist/grub-theme/theme-buildroot.txt \
+             release/boot/grub/themes/fix-automation/theme.txt
+
+          cat > release/EFI/BOOT/grub.cfg << 'EOF'
+          set timeout=5
+          set default=0
+
+          # Load theme if supported (graceful fallback to text mode)
+          set gfxmode=1920x1080,1024x768,auto
+          insmod all_video
+          insmod gfxterm
+          terminal_output gfxterm
+          set theme=/boot/grub/themes/fix-automation/theme.txt
+
+          menuentry "Fix-Automation Rescue (Buildroot)" {
+              linux  /EFI/BOOT/bzImage console=tty0 loglevel=7 earlycon=efifb fbcon=nodefer
+              initrd /EFI/BOOT/rootfs.cpio.gz
+          }
+
+          menuentry "Reboot" {
+              reboot
+          }
+
+          menuentry "Poweroff" {
+              halt
+          }
+          EOF
           cd release && zip -r ../grub-rescue-usb.zip .
 
       - name: build bootable ISO (Ventoy compatible)
@@ -94,13 +124,35 @@ jobs:
           cp buildroot/output/images/rootfs.cpio.gz iso-root/EFI/BOOT/
           cp ${{ steps.efi.outputs.path }}           iso-root/EFI/BOOT/BOOTX64.EFI
 
+          # Copy GRUB theme
+          mkdir -p iso-root/boot/grub/themes/fix-automation
+          cp dist/grub-theme/*.png dist/grub-theme/*.pf2 \
+             iso-root/boot/grub/themes/fix-automation/
+          cp dist/grub-theme/theme-buildroot.txt \
+             iso-root/boot/grub/themes/fix-automation/theme.txt
+
           # GRUB config for ISO boot (EFI + BIOS fallback via grub-pc-bin)
           cat > iso-root/boot/grub/grub.cfg << 'EOF'
           set timeout=5
           set default=0
-          menuentry "Fix-Automation Rescue" {
+
+          set gfxmode=1920x1080,1024x768,auto
+          insmod all_video
+          insmod gfxterm
+          terminal_output gfxterm
+          set theme=/boot/grub/themes/fix-automation/theme.txt
+
+          menuentry "Fix-Automation Rescue (Buildroot)" {
               linux  /EFI/BOOT/bzImage console=tty0 loglevel=7 earlycon=efifb fbcon=nodefer
               initrd /EFI/BOOT/rootfs.cpio.gz
+          }
+
+          menuentry "Reboot" {
+              reboot
+          }
+
+          menuentry "Poweroff" {
+              halt
           }
           EOF
 
