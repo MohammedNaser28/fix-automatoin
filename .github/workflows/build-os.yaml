@@ -95,7 +95,6 @@ jobs:
           set default=0
 
           # Load theme if supported (graceful fallback to text mode)
-          set gfxmode=1920x1080,1024x768,auto
           insmod all_video
           insmod gfxterm
           terminal_output gfxterm
@@ -136,7 +135,6 @@ jobs:
           set timeout=5
           set default=0
 
-          set gfxmode=1920x1080,1024x768,auto
           insmod all_video
           insmod gfxterm
           terminal_output gfxterm
