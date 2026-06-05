@@ -24,6 +24,7 @@ pub fn init_system() -> Result<(), Box<dyn std::error::Error>> {
 
 fn mount_fs() -> Result<(), Box<dyn std::error::Error>> {
     use nix::mount::{MsFlags, mount};
+    use nix::errno::Errno;
 
     let flags = MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV;
 
@@ -31,25 +32,26 @@ fn mount_fs() -> Result<(), Box<dyn std::error::Error>> {
 
     let _ = mount::<str, str, str, str>(Some("sysfs"), "/sys", Some("sysfs"), flags, None::<&str>);
 
-    if !Path::new("/dev/console").exists() {
-        mount::<str, str, str, str>(
-            Some("devtmpfs"),
-            "/dev",
-            Some("devtmpfs"),
-            MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
-            None::<&str>,
-        )?;
+    match mount::<str, str, str, str>(
+        Some("devtmpfs"),
+        "/dev",
+        Some("devtmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
+        None::<&str>,
+    ) {
+        Err(Errno::EBUSY) => {} // kernel auto-mounted devtmpfs — fine
+        Err(e) => return Err(e.into()),
+        Ok(_) => {}
     }
+
+    Ok(())
+}
 
     Ok(())
 }
 
 fn setup_console() -> Result<(), Box<dyn std::error::Error>> {
     use std::os::fd::AsRawFd;
-
-    if unsafe { libc::isatty(0) } == 1 {
-        return Ok(());
-    }
 
     for dev in &["/dev/tty0", "/dev/console", "/dev/tty1"] {
         if let Ok(fd) = nix::fcntl::open(
