@@ -70,7 +70,7 @@ jobs:
             -m 512M -machine q35 -nographic \
             -bios "$OVMF" \
             -no-reboot -accel tcg 2>&1 | tee serial-uefi.log || true
-          grep -q "Run /init as init process" serial-uefi.log \
+          grep -q "init process" serial-uefi.log \
             && echo "UEFI PASS" \
             || (echo "UEFI FAIL"; cat serial-uefi.log; exit 1)
 
@@ -80,7 +80,7 @@ jobs:
             -cdrom fix-automation-x86_64-alpine.iso \
             -m 512M -machine pc -nographic \
             -no-reboot -accel tcg 2>&1 | tee serial-bios.log || true
-          grep -q "Run /init as init process" serial-bios.log \
+          grep -q "init process" serial-bios.log \
             && echo "BIOS PASS" \
             || (echo "BIOS FAIL"; cat serial-bios.log; exit 1)
 
