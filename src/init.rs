@@ -21,28 +21,27 @@ pub fn init_system() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Err(e) = load_modules(s) {
         serial_fd(s, &format!("init: load_modules: {e}"));
-        return Err(e);
     }
     serial_fd(s, "init: modules done");
 
+    // Always set up console (tty0 works with vgacon in text mode)
     if let Err(e) = setup_console() {
         serial_fd(s, &format!("init: setup_console: {e}"));
         return Err(e);
     }
-    if let Err(e) = set_controlling_tty() {
-        serial_fd(s, &format!("init: set_controlling_tty: {e}"));
-        return Err(e);
+    if Path::new("/dev/fb0").exists() {
+        serial_fd(s, "init: /dev/fb0 OK");
+        if let Err(e) = set_controlling_tty() {
+            serial_fd(s, &format!("init: set_controlling_tty: {e}"));
+            return Err(e);
+        }
+    } else {
+        serial_fd(s, "init: /dev/fb0 missing — VT visible, no fbcon");
     }
+
     if let Err(e) = setup_signals() {
         serial_fd(s, &format!("init: setup_signals: {e}"));
         return Err(e);
-    }
-
-    // Quick sanity: does /dev/fb0 exist?
-    if std::path::Path::new("/dev/fb0").exists() {
-        serial_fd(s, "init: /dev/fb0 OK");
-    } else {
-        serial_fd(s, "init: /dev/fb0 missing");
     }
 
     serial_fd(s, "init: done");

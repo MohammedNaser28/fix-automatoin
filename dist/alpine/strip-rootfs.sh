@@ -17,8 +17,7 @@ echo "Stripping rootfs at $ROOTFS ..."
 rm -rf "$ROOTFS/sbin/apk" "$ROOTFS/usr/sbin/apk" "$ROOTFS/etc/apk"
 find "$ROOTFS/usr/lib" -name "apk" -type d -exec rm -rf {} + 2>/dev/null || true
 
-# --- Remove BusyBox and all its symlinks ---
-rm -f "$ROOTFS/bin/busybox" "$ROOTFS/sbin/busybox"
+# --- Remove BusyBox symlinks (keep binary for module loading) ---
 find "$ROOTFS/bin" "$ROOTFS/sbin" "$ROOTFS/usr/bin" "$ROOTFS/usr/sbin" -type l -delete 2>/dev/null || true
 
 # --- Remove shared libraries (fully static binary) ---

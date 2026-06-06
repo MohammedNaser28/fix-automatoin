@@ -85,6 +85,9 @@ chmod 755 "$STAGING_DIR/rootfs/fix-automation"
 # Strip again (binary already stripped by Cargo profile, belt-and-suspenders)
 strip "$STAGING_DIR/rootfs/fix-automation" 2>/dev/null || true
 
+# Busybox symlink at /busybox for init's module loading
+ln -sf /bin/busybox "$STAGING_DIR/rootfs/busybox"
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Step 4: Add minimal /etc files
 # ══════════════════════════════════════════════════════════════════════════════
