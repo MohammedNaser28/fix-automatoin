@@ -11,4 +11,4 @@ tmp/
 tmp2/
 qemu-test-images/
 *.zip
-tmp3/
+tmp3/*.iso
