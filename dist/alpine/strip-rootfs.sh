@@ -20,8 +20,8 @@ find "$ROOTFS/usr/lib" -name "apk" -type d -exec rm -rf {} + 2>/dev/null || true
 # --- Remove BusyBox symlinks (keep binary for module loading) ---
 find "$ROOTFS/bin" "$ROOTFS/sbin" "$ROOTFS/usr/bin" "$ROOTFS/usr/sbin" -type l -delete 2>/dev/null || true
 
-# --- Remove shared libraries (fully static binary) ---
-find "$ROOTFS/lib" -maxdepth 1 -name "*.so*" -delete
+# --- Remove shared libraries except musl (busybox is dynamically linked) ---
+find "$ROOTFS/lib" -maxdepth 1 -name "*.so*" ! -name "libc.musl*" ! -name "ld-musl*" -delete
 find "$ROOTFS/lib" -maxdepth 1 -name "*.a" -delete
 find "$ROOTFS/usr/lib" -name "*.so*" -delete 2>/dev/null || true
 find "$ROOTFS/usr/lib" -name "*.a" -delete 2>/dev/null || true

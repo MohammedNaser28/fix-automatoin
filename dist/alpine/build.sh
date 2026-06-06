@@ -130,13 +130,25 @@ else
         drivers/gpu/drm/tiny/bochs
     "
     for relpath in $MODULE_DEPS; do
-        src="${KERNEL_MODDIR}/${relpath}.ko.gz"
-        dst="${MODULES_DIR}/$(basename ${relpath}).ko"
-        if [ -f "$src" ]; then
-            gunzip -c "$src" > "$dst"
-            ok "  Module: $(basename ${relpath}).ko ($(numfmt_to_iec $(stat -c%s "$dst")))"
+        base="$(basename ${relpath}).ko"
+        dst="${MODULES_DIR}/${base}"
+        src=""
+        for ext in ko.gz ko.zst ko; do
+            candidate="${KERNEL_MODDIR}/${relpath}.${ext}"
+            if [ -f "$candidate" ]; then
+                src="$candidate"
+                break
+            fi
+        done
+        if [ -n "$src" ]; then
+            case "$src" in
+                *.gz)   gunzip -c "$src" > "$dst" ;;
+                *.zst)  zstd -dc --no-check "$src" > "$dst" 2>/dev/null ;;
+                *)      cp "$src" "$dst" ;;
+            esac
+            ok "  Module: ${base} ($(numfmt_to_iec $(stat -c%s "$dst")))"
         else
-            warn "  Module not found: ${relpath}.ko.gz"
+            warn "  Module not found: ${relpath}.ko.{gz,zst,ko}"
         fi
     done
 fi
