@@ -12,6 +12,8 @@ env:
 jobs:
   rust-ci:
     uses: ./.github/workflows/rust-ci.yml
+    with:
+      features: default
 
   build-os:
     name: Build Buildroot OS image

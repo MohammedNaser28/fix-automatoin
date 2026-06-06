@@ -2,6 +2,11 @@ name: Rust CI
 
 on:
   workflow_call:
+    inputs:
+      features:
+        description: "Features to build: default or alpine"
+        required: true
+        type: string
     outputs:
       cache-key:
         description: "Cargo target cache key for downstream jobs"
@@ -41,16 +46,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       cache-key: ${{ steps.cache-key.outputs.value }}
-    strategy:
-      matrix:
-        features: [default, alpine]
-        include:
-          - features: default
-            artifact: rust-bin-x86_64-default
-            flags: ""
-          - features: alpine
-            artifact: rust-bin-x86_64-alpine
-            flags: "--features alpine"
 
     steps:
       - uses: actions/checkout@v4
@@ -74,18 +69,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-musl-${{ matrix.features }}-${{ hashFiles('Cargo.lock', 'src/**/*.rs') }}
-          restore-keys: ${{ runner.os }}-cargo-target-musl-${{ matrix.features }}-
+          key: ${{ runner.os }}-cargo-target-musl-${{ inputs.features }}-${{ hashFiles('Cargo.lock', 'src/**/*.rs') }}
+          restore-keys: ${{ runner.os }}-cargo-target-musl-${{ inputs.features }}-
 
       - name: compute cache key output
         id: cache-key
-        run: echo "value=${{ runner.os }}-cargo-target-musl-${{ matrix.features }}-${{ hashFiles('Cargo.lock', 'src/**/*.rs') }}" >> $GITHUB_OUTPUT
+        run: echo "value=${{ runner.os }}-cargo-target-musl-${{ inputs.features }}-${{ hashFiles('Cargo.lock', 'src/**/*.rs') }}" >> $GITHUB_OUTPUT
 
       - name: build static binary
-        run: cargo build --release --target x86_64-unknown-linux-musl ${{ matrix.flags }}
+        run: cargo build --release --target x86_64-unknown-linux-musl ${{ inputs.features == 'alpine' && '--features alpine' || '' }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: rust-bin-x86_64-${{ inputs.features }}
           path: target/x86_64-unknown-linux-musl/release/fix-automation
           retention-days: 3

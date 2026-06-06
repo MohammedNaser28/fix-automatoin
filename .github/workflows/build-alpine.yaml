@@ -9,6 +9,8 @@ on:
 jobs:
   rust-ci:
     uses: ./.github/workflows/rust-ci.yml
+    with:
+      features: alpine
 
   build-iso:
     needs: [rust-ci]
