@@ -7,7 +7,12 @@
 FIX_AUTOMATION_VERSION = local
 FIX_AUTOMATION_SITE    = $(BR2_EXTERNAL_LINUX_RESCUE_PATH)/..
 FIX_AUTOMATION_SITE_METHOD = local
-FIX_AUTOMATION_OVERRIDE_SRCDIR_RSYNC_EXCLUDES = buildroot/
+
+# Remove nested buildroot/ after rsync to prevent infinite rsync nesting
+define FIX_AUTOMATION_RM_BUILDROOT
+	rm -rf $(@D)/buildroot
+endef
+FIX_AUTOMATION_POST_RSYNC_HOOKS += FIX_AUTOMATION_RM_BUILDROOT
 
 define FIX_AUTOMATION_BUILD_CMDS
 	# Binary pre-built by CI — nothing to do here
