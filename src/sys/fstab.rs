@@ -137,3 +137,137 @@ impl FstabAuditor {
         Ok(issues)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_fstab(content: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("etc")).unwrap();
+        std::fs::write(dir.path().join("etc/fstab"), content).unwrap();
+        dir
+    }
+
+    fn live(path: &str, uuid: &str, fstype: &str, mount: Option<&str>) -> LivePartition {
+        LivePartition {
+            path: path.into(),
+            uuid: uuid.into(),
+            fstype: fstype.into(),
+            current_mount: mount.map(|m| m.into()),
+        }
+    }
+
+    #[test]
+    fn missing_fstab_is_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = FstabAuditor::audit_fstab(dir.path(), &[]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn valid_fstab_no_issues() {
+        let dir = write_fstab("UUID=aaaa-1111  /  ext4  defaults 0 1\n");
+        let devs = [live("/dev/sda1", "aaaa-1111", "ext4", Some("/"))];
+        let issues = FstabAuditor::audit_fstab(dir.path(), &devs).unwrap();
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn comments_and_blank_lines_skipped() {
+        let dir = write_fstab("# a comment\n\nUUID=aaaa-1111  /  ext4  defaults 0 1\n");
+        let devs = [live("/dev/sda1", "aaaa-1111", "ext4", None)];
+        let issues = FstabAuditor::audit_fstab(dir.path(), &devs).unwrap();
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn unknown_uuid_flagged_with_live_suggestion() {
+        let dir = write_fstab("UUID=dead-beef  /  ext4  defaults 0 1\n");
+        let devs = [live("/dev/sda1", "aaaa-1111", "ext4", Some("/"))];
+        let issues = FstabAuditor::audit_fstab(dir.path(), &devs).unwrap();
+        assert_eq!(issues.len(), 1);
+        match &issues[0] {
+            FstabIssue::UuidMismatch {
+                mount_point,
+                expected_uuid,
+                live_uuid,
+            } => {
+                assert_eq!(mount_point, "/");
+                assert_eq!(expected_uuid, "dead-beef");
+                assert_eq!(live_uuid.as_deref(), Some("aaaa-1111"));
+            }
+            other => panic!("expected UuidMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fstype_mismatch_flagged() {
+        let dir = write_fstab("UUID=aaaa-1111  /  btrfs  defaults 0 1\n");
+        let devs = [live("/dev/sda1", "aaaa-1111", "ext4", None)];
+        let issues = FstabAuditor::audit_fstab(dir.path(), &devs).unwrap();
+        assert_eq!(issues.len(), 1);
+        assert!(matches!(issues[0], FstabIssue::UnusualFsType { .. }));
+    }
+
+    #[test]
+    fn raw_dev_path_resolved_to_live_uuid() {
+        let dir = write_fstab("/dev/sda1  /  ext4  defaults 0 1\n");
+        let devs = [live("/dev/sda1", "aaaa-1111", "ext4", None)];
+        let issues = FstabAuditor::audit_fstab(dir.path(), &devs).unwrap();
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn quoted_uuid_handled() {
+        let dir = write_fstab("UUID=\"aaaa-1111\"  /  ext4  defaults 0 1\n");
+        let devs = [live("/dev/sda1", "aaaa-1111", "ext4", None)];
+        let issues = FstabAuditor::audit_fstab(dir.path(), &devs).unwrap();
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn missing_swap_flagged() {
+        let dir = write_fstab("UUID=aaaa-1111  /  ext4  defaults 0 1\n");
+        let devs = [
+            live("/dev/sda1", "aaaa-1111", "ext4", None),
+            live("/dev/sda2", "bbbb-2222", "swap", None),
+        ];
+        let issues = FstabAuditor::audit_fstab(dir.path(), &devs).unwrap();
+        assert_eq!(issues.len(), 1);
+        match &issues[0] {
+            FstabIssue::MissingSwap { live_swap_uuid } => {
+                assert_eq!(live_swap_uuid, "bbbb-2222");
+            }
+            other => panic!("expected MissingSwap, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn declared_swap_not_flagged() {
+        let dir =
+            write_fstab("UUID=aaaa-1111  /  ext4  defaults 0 1\nUUID=bbbb-2222  none  swap  sw 0 0\n");
+        let devs = [
+            live("/dev/sda1", "aaaa-1111", "ext4", None),
+            live("/dev/sda2", "bbbb-2222", "swap", None),
+        ];
+        let issues = FstabAuditor::audit_fstab(dir.path(), &devs).unwrap();
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn malformed_lines_skipped() {
+        let dir = write_fstab("just-one-field\n\n# comment\n");
+        let issues = FstabAuditor::audit_fstab(dir.path(), &[]).unwrap();
+        // No UUID targets and no swap partitions -> no issues
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn non_device_spec_ignored() {
+        // e.g. tmpfs / proc entries have no UUID= or /dev/ prefix
+        let dir = write_fstab("tmpfs  /tmp  tmpfs  defaults 0 0\nproc  /proc  proc  defaults 0 0\n");
+        let issues = FstabAuditor::audit_fstab(dir.path(), &[]).unwrap();
+        assert!(issues.is_empty());
+    }
+}

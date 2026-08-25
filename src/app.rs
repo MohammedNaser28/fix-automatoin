@@ -376,24 +376,46 @@ impl App {
     // ── Exec log — drain pending lines from the repair thread ─────────────────
 
     pub fn drain_log(&mut self) {
-        // Collect lines to avoid holding a borrow on self.log_rx while mutating self
-        if self.log_rx.is_none() {
-            return;
-        }
+        // Take the receiver out to avoid holding a borrow on self while mutating
+        let rx = match self.log_rx.take() {
+            Some(rx) => rx,
+            None => return,
+        };
+
         let mut new_lines: Vec<LogLine> = Vec::new();
         let mut done = false;
-        if let Some(ref rx) = self.log_rx {
-            while let Ok(line) = rx.try_recv() {
-                if let LogKind::DiagnosisResult(summary, rec) = line.kind.clone() {
-                    self.diagnosis_summary = summary;
-                    self.recommended_action = rec;
-                } else if line.kind == LogKind::Done {
-                    done = true;
-                } else {
-                    new_lines.push(line);
+
+        loop {
+            match rx.try_recv() {
+                Ok(line) => match line.kind {
+                    LogKind::DiagnosisResult(summary, rec) => {
+                        self.diagnosis_summary = summary;
+                        self.recommended_action = rec;
+                    }
+                    LogKind::Done => {
+                        done = true;
+                        break;
+                    }
+                    _ => new_lines.push(line),
+                },
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    // Thread still running - put the receiver back for next tick
+                    self.log_rx = Some(rx);
+                    break;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    // Sender dropped without a Done signal - the thread panicked.
+                    if !done {
+                        new_lines.push(LogLine::error(
+                            "repair thread crashed before completion",
+                        ));
+                        done = true;
+                    }
+                    break;
                 }
             }
         }
+
         for line in new_lines {
             if line.kind == LogKind::Step {
                 self.exec_step += 1;
@@ -402,7 +424,6 @@ impl App {
         }
         if done {
             self.exec_done = true;
-            self.log_rx = None;
         }
     }
 
@@ -459,5 +480,240 @@ impl App {
         std::thread::spawn(move || {
             crate::repair::run(tx, action, root, efi, is_uefi);
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn disk(name: &str, label: Option<&str>) -> DiskInfo {
+        DiskInfo {
+            name: name.into(),
+            size: "10G".into(),
+            fstype: Some("ext4".into()),
+            label: label.map(|l| l.into()),
+            uuid: Some("uuid-1".into()),
+            mountpoint: None,
+            is_efi: false,
+            contents: None,
+        }
+    }
+
+    fn test_app() -> App {
+        let mut app = App::new();
+        // Replace live scan results with deterministic fixtures
+        app.disks = vec![disk("sda1", None), disk("sda2", None), disk("sda3", None)];
+        app.scan_state = ScanState::Done;
+        app.scan_rx = None;
+        app
+    }
+
+    #[test]
+    fn action_items_all_have_labels_and_descriptions() {
+        for item in ACTION_ITEMS.iter().flatten() {
+            assert!(!item.label().is_empty());
+            assert!(!item.description().is_empty());
+        }
+    }
+
+    #[test]
+    fn action_cursor_starts_on_first_real_action() {
+        let app = test_app();
+        assert!(ACTION_ITEMS[app.action_cursor].is_some());
+        assert_eq!(app.action_cursor, 1); // index 0 is the "repair" header
+    }
+
+    #[test]
+    fn action_nav_skips_headers() {
+        let mut app = test_app();
+        // index 1 -> 2 -> 3 -> 4, next must jump over header at 5 to 6
+        app.action_cursor = 4;
+        app.action_next();
+        assert_eq!(app.action_cursor, 6);
+
+        // prev from 6 skips the header at 5 back to 4
+        app.action_prev();
+        assert_eq!(app.action_cursor, 4);
+    }
+
+    #[test]
+    fn action_nav_wraps_forward_and_stops_at_top_backward() {
+        let mut app = test_app();
+        let last = ACTION_ITEMS.len() - 1; // last real action index
+        assert!(ACTION_ITEMS[last].is_some());
+
+        // Wrap from last back to first action
+        app.action_cursor = last;
+        app.action_next();
+        assert_eq!(app.action_cursor, 1);
+
+        // At first action, prev does not move onto the header
+        app.action_prev();
+        assert_eq!(app.action_cursor, 1);
+    }
+
+    #[test]
+    fn confirm_focus_toggles_both_ways() {
+        let mut app = test_app();
+        assert_eq!(app.confirm_focus, ConfirmFocus::Confirm);
+        app.toggle_confirm_buttons();
+        assert_eq!(app.confirm_focus, ConfirmFocus::Back);
+        app.toggle_confirm_buttons();
+        assert_eq!(app.confirm_focus, ConfirmFocus::Confirm);
+    }
+
+    #[test]
+    fn table_selection_wraps() {
+        let mut app = test_app();
+
+        app.table_state.select(Some(0));
+        app.select_previous();
+        assert_eq!(app.table_state.selected(), Some(2));
+
+        app.select_next();
+        assert_eq!(app.table_state.selected(), Some(0));
+
+        app.select_next();
+        assert_eq!(app.table_state.selected(), Some(1));
+    }
+
+    #[test]
+    fn empty_disk_list_navigation_is_noop() {
+        let mut app = test_app();
+        app.disks.clear();
+        app.table_state.select(Some(0));
+        app.select_next();
+        app.select_previous();
+        assert_eq!(app.table_state.selected(), Some(0));
+    }
+
+    #[test]
+    fn heuristic_distro_from_partition_label() {
+        let cases = [
+            ("arch-root", "Arch Linux"),
+            ("debian", "Debian"),
+            ("ubuntu", "Ubuntu"),
+            ("fedora", "Fedora"),
+            ("nixos", "NixOS"),
+            ("mint", "Linux Mint"),
+        ];
+        for (label, expected) in cases {
+            let mut app = test_app();
+            app.disks[0].label = Some(label.into());
+            app.selected_root = Some(app.disks[0].clone());
+            assert_eq!(app.heuristic_distro(), expected, "label={label}");
+        }
+    }
+
+    #[test]
+    fn heuristic_distro_unknown_when_no_match() {
+        let mut app = test_app();
+        app.selected_root = Some(disk("sda2", Some("data")));
+        assert_eq!(app.heuristic_distro(), "Unknown Linux");
+    }
+
+    #[test]
+    fn detected_distro_takes_priority_over_heuristic() {
+        let mut app = test_app();
+        app.detected_distro = Some("Gentoo".into());
+        app.selected_root = Some(disk("sda1", Some("arch")));
+        assert_eq!(app.heuristic_distro(), "Gentoo");
+    }
+
+    #[test]
+    fn drain_log_counts_steps_and_sets_done() {
+        let mut app = test_app();
+        let (tx, rx) = std::sync::mpsc::channel::<LogLine>();
+        app.log_rx = Some(rx);
+        app.exec_step = 0;
+        app.exec_done = false;
+
+        tx.send(LogLine::step("step one")).unwrap();
+        tx.send(LogLine::ok("did something")).unwrap();
+        tx.send(LogLine::step("step two")).unwrap();
+        tx.send(LogLine::error("boom")).unwrap();
+        tx.send(LogLine::done()).unwrap();
+        drop(tx);
+
+        app.drain_log();
+
+        assert_eq!(app.exec_step, 2);
+        assert_eq!(app.log_lines.len(), 4);
+        assert!(app.exec_done);
+        assert!(app.log_rx.is_none());
+    }
+
+    #[test]
+    fn drain_log_extracts_diagnosis_result() {
+        let mut app = test_app();
+        let (tx, rx) = std::sync::mpsc::channel::<LogLine>();
+        app.log_rx = Some(rx);
+
+        tx.send(LogLine {
+            kind: LogKind::DiagnosisResult(
+                vec!["Diagnosis: broken".into()],
+                Some(Action::FixGrub),
+            ),
+            text: String::new(),
+        })
+        .unwrap();
+        tx.send(LogLine::done()).unwrap();
+        drop(tx);
+
+        app.drain_log();
+
+        assert_eq!(app.diagnosis_summary, vec!["Diagnosis: broken".to_string()]);
+        assert_eq!(app.recommended_action, Some(Action::FixGrub));
+        // DiagnosisResult is not rendered as a log line
+        assert!(app.log_lines.is_empty());
+        assert!(app.exec_done);
+    }
+
+    #[test]
+    fn drain_log_without_receiver_is_noop() {
+        let mut app = test_app();
+        app.drain_log();
+        assert!(!app.exec_done);
+    }
+
+    #[test]
+    fn drain_log_recovers_from_crashed_thread() {
+        let mut app = test_app();
+        let (tx, rx) = std::sync::mpsc::channel::<LogLine>();
+        app.log_rx = Some(rx);
+        app.exec_done = false;
+
+        tx.send(LogLine::step("mounting")).unwrap();
+        // Simulate a panic: sender dropped without ever sending Done
+        drop(tx);
+
+        app.drain_log();
+
+        assert!(app.exec_done, "UI must not hang when the thread panics");
+        assert_eq!(app.exec_step, 1);
+        let last = app.log_lines.last().unwrap();
+        assert_eq!(last.kind, LogKind::Error);
+        assert!(last.text.contains("crashed"));
+        // Receiver must be gone so drain is a no-op afterwards
+        assert!(app.log_rx.is_none());
+    }
+
+    #[test]
+    fn check_scan_consumes_channel_once() {
+        let mut app = test_app();
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(vec![disk("vda1", None)]).unwrap();
+        app.scan_rx = Some(rx);
+        app.scan_state = ScanState::Scanning;
+
+        app.check_scan();
+        assert_eq!(app.scan_state, ScanState::Done);
+        assert_eq!(app.disks.len(), 1);
+        assert_eq!(app.disks[0].name, "vda1");
+
+        // Second call is a no-op
+        app.check_scan();
+        assert_eq!(app.disks.len(), 1);
     }
 }

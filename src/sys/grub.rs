@@ -126,3 +126,83 @@ pub fn execute_grub_repair(
     distro.post_grub_hook(chroot_path)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sys::distros::arch::ArchLinux;
+
+    fn write_default_grub(content: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("etc/default/grub");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, content).unwrap();
+        dir
+    }
+
+    fn read_default_grub(dir: &tempfile::TempDir) -> String {
+        std::fs::read_to_string(dir.path().join("etc/default/grub")).unwrap()
+    }
+
+    #[test]
+    fn os_prober_creates_baseline_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        ensure_os_prober_enabled(dir.path(), &ArchLinux).unwrap();
+        let content = read_default_grub(&dir);
+        assert!(content.contains("GRUB_DISABLE_OS_PROBER=false"));
+    }
+
+    #[test]
+    fn os_prober_flips_true_to_false() {
+        let dir = write_default_grub("GRUB_TIMEOUT=5\nGRUB_DISABLE_OS_PROBER=true\n");
+        ensure_os_prober_enabled(dir.path(), &ArchLinux).unwrap();
+        let content = read_default_grub(&dir);
+        assert!(content.contains("GRUB_DISABLE_OS_PROBER=false"));
+        assert!(!content.contains("GRUB_DISABLE_OS_PROBER=true"));
+        // Existing settings preserved
+        assert!(content.contains("GRUB_TIMEOUT=5"));
+    }
+
+    #[test]
+    fn os_prober_appends_when_absent() {
+        let dir = write_default_grub("GRUB_TIMEOUT=5\n");
+        ensure_os_prober_enabled(dir.path(), &ArchLinux).unwrap();
+        let content = read_default_grub(&dir);
+        assert!(content.contains("GRUB_TIMEOUT=5"));
+        assert!(content.contains("GRUB_DISABLE_OS_PROBER=false"));
+    }
+
+    #[test]
+    fn os_prober_noop_when_already_enabled() {
+        let dir = write_default_grub("GRUB_DISABLE_OS_PROBER=false\n");
+        ensure_os_prober_enabled(dir.path(), &ArchLinux).unwrap();
+        assert_eq!(
+            read_default_grub(&dir),
+            "GRUB_DISABLE_OS_PROBER=false\n"
+        );
+    }
+
+    #[test]
+    fn presence_check_passes_when_bins_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("usr/bin")).unwrap();
+        std::fs::write(dir.path().join("usr/bin/grub-install"), "").unwrap();
+        std::fs::write(dir.path().join("usr/bin/grub-mkconfig"), "").unwrap();
+        assert!(check_presence_of_grub(dir.path(), &ArchLinux).is_ok());
+    }
+
+    #[test]
+    fn presence_check_fails_on_missing_mkconfig() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("usr/bin")).unwrap();
+        std::fs::write(dir.path().join("usr/bin/grub-install"), "").unwrap();
+        let err = check_presence_of_grub(dir.path(), &ArchLinux).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn presence_check_fails_when_nothing_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(check_presence_of_grub(dir.path(), &ArchLinux).is_err());
+    }
+}

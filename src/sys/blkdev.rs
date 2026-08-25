@@ -4,6 +4,20 @@ use std::collections::HashSet;
 #[cfg(not(feature = "alpine"))]
 use std::process::Command;
 
+/// GPT GUID of the EFI System Partition
+const ESP_GUID: &str = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b";
+
+/// Decides whether a partition is an EFI System Partition.
+/// GPT: match by partition type GUID (reliable — a FAT data partition is not an ESP).
+/// MBR (`0xef`) also counts. When the type is unknown (Alpine sysfs path), fall back
+/// to the vfat heuristic.
+pub fn is_esp(parttype: Option<&str>, fstype: Option<&str>) -> bool {
+    match parttype {
+        Some(t) => t.eq_ignore_ascii_case(ESP_GUID) || t.eq_ignore_ascii_case("0xef"),
+        None => fstype == Some("vfat"),
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct DiskInfo {
     pub name: String,
@@ -28,6 +42,7 @@ struct BlockDevice {
     name: String,
     size: String,
     fstype: Option<String>,
+    parttype: Option<String>,
     label: Option<String>,
     uuid: Option<String>,
     mountpoint: Option<String>,
@@ -47,7 +62,7 @@ fn get_disks_lsblk() -> Vec<DiskInfo> {
     let _ = Command::new("udevadm").args(["settle"]).output();
 
     let output = match Command::new("lsblk")
-        .args(["--json", "-o", "NAME,SIZE,FSTYPE,LABEL,UUID,MOUNTPOINT"])
+        .args(["--json", "-o", "NAME,SIZE,FSTYPE,PARTTYPE,LABEL,UUID,MOUNTPOINT"])
         .output()
     {
         Ok(o) => o,
@@ -73,7 +88,7 @@ fn get_disks_lsblk() -> Vec<DiskInfo> {
         let has_children = dev.children.as_ref().is_some_and(|c| !c.is_empty());
 
         if !has_children {
-            let is_efi = dev.fstype.as_deref() == Some("vfat");
+            let is_efi = is_esp(dev.parttype.as_deref(), dev.fstype.as_deref());
             if seen.insert(dev.name.clone()) {
                 disks.push(DiskInfo {
                     name: dev.name,
@@ -95,7 +110,7 @@ fn get_disks_lsblk() -> Vec<DiskInfo> {
 
         if let Some(partitions) = dev.children {
             for part in partitions {
-                let is_efi = part.fstype.as_deref() == Some("vfat");
+                let is_efi = is_esp(part.parttype.as_deref(), part.fstype.as_deref());
                 if seen.insert(part.name.clone()) {
                     disks.push(DiskInfo {
                         name: part.name,
@@ -152,21 +167,22 @@ fn add_sysfs_fallback(seen: &mut HashSet<String>, disks: &mut Vec<DiskInfo>) {
     }
 }
 
+fn format_size(bytes: u64) -> String {
+    if bytes >= 1_000_000_000_000 {
+        format!("{:.1}T", bytes as f64 / 1_000_000_000_000.0)
+    } else if bytes >= 1_000_000_000 {
+        format!("{:.1}G", bytes as f64 / 1_000_000_000.0)
+    } else {
+        format!("{:.0}M", bytes as f64 / 1_000_000.0)
+    }
+}
+
 #[cfg(not(feature = "alpine"))]
 fn read_sysfs_size(name: &str) -> String {
     std::fs::read_to_string(format!("/sys/block/{name}/size"))
         .ok()
         .and_then(|s| s.trim().parse::<u64>().ok())
-        .map(|sectors| {
-            let bytes = sectors * 512;
-            if bytes >= 1_000_000_000_000 {
-                format!("{:.1}T", bytes as f64 / 1_000_000_000_000.0)
-            } else if bytes >= 1_000_000_000 {
-                format!("{:.1}G", bytes as f64 / 1_000_000_000.0)
-            } else {
-                format!("{:.0}M", bytes as f64 / 1_000_000.0)
-            }
-        })
+        .map(|sectors| format_size(sectors * 512))
         .unwrap_or_default()
 }
 
@@ -198,13 +214,7 @@ fn get_disks_sysfs() -> Vec<DiskInfo> {
         seen.insert(name.clone());
 
         let bytes = blocks * 1024; // /proc/partitions reports in 1K blocks
-        let size = if bytes >= 1_000_000_000_000 {
-            format!("{:.1}T", bytes as f64 / 1_000_000_000_000.0)
-        } else if bytes >= 1_000_000_000 {
-            format!("{:.1}G", bytes as f64 / 1_000_000_000.0)
-        } else {
-            format!("{:.0}M", bytes as f64 / 1_000_000.0)
-        };
+        let size = format_size(bytes);
 
         let is_partition = name.chars().any(|c| c.is_ascii_digit());
 
@@ -241,11 +251,40 @@ fn probe_partition(
     bool,
 ) {
     let (fstype, mountpoint) = mount_info(name);
-    let is_efi = fstype.as_deref() == Some("vfat");
+    // No partition-type GUID available on the sysfs path — vfat heuristic fallback
+    let is_efi = is_esp(None, fstype.as_deref());
     let label = read_first_line(&format!("/sys/block/{}/uevent", parent(name)))
         .or_else(|| Some(name.to_string()));
-    let uuid = None; // blkid not available; skipped for now
+    let uuid = uuid_for(name);
     (fstype, mountpoint, label, uuid, is_efi)
+}
+
+/// Resolves a partition's UUID by walking the `/dev/disk/by-uuid` symlinks.
+/// Pure std — no blkid required. Matching logic lives in [`uuid_from_links`]
+/// so it stays unit-testable without root or real devices.
+#[cfg(feature = "alpine")]
+fn uuid_for(name: &str) -> Option<String> {
+    let entries = std::fs::read_dir("/dev/disk/by-uuid").ok()?;
+    let links = entries.flatten().filter_map(|entry| {
+        let uuid = entry.file_name().to_string_lossy().to_string();
+        let target = std::fs::read_link(entry.path())
+            .ok()?
+            .file_name()?
+            .to_string_lossy()
+            .to_string();
+        Some((uuid, target))
+    });
+    uuid_from_links(name, links)
+}
+
+#[cfg(feature = "alpine")]
+fn uuid_from_links<I>(name: &str, mut links: I) -> Option<String>
+where
+    I: Iterator<Item = (String, String)>,
+{
+    links
+        .find(|(_, dev)| dev == name)
+        .map(|(uuid, _)| uuid)
 }
 
 #[cfg(feature = "alpine")]
@@ -277,4 +316,95 @@ fn read_first_line(path: &str) -> Option<String> {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|s| s.lines().next().map(|l| l.trim().to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_size_bytes() {
+        // Decimal (SI) units, rounded to whole M
+        assert_eq!(format_size(536_870_912), "537M");
+        assert_eq!(format_size(0), "0M");
+    }
+
+    #[test]
+    fn format_size_gigabytes() {
+        assert_eq!(format_size(500_000_000_000), "500.0G");
+    }
+
+    #[test]
+    fn format_size_terabytes() {
+        assert_eq!(format_size(2_000_000_000_000), "2.0T");
+    }
+
+    #[test]
+    fn format_size_boundary_below_tb() {
+        // Just under 1TB stays in G
+        assert_eq!(format_size(999_999_999_999), "1000.0G");
+    }
+
+    #[test]
+    fn disk_info_is_efi_only_for_vfat() {
+        let d = DiskInfo {
+            name: "sda1".into(),
+            size: "1G".into(),
+            fstype: Some("ext4".into()),
+            label: None,
+            uuid: None,
+            mountpoint: None,
+            is_efi: false,
+            contents: None,
+        };
+        assert!(!d.is_efi);
+    }
+
+    #[test]
+    fn esp_guid_is_detected_case_insensitive() {
+        assert!(is_esp(
+            Some("C12A7328-F81F-11D2-BA4B-00A0C93EC93B"),
+            Some("vfat")
+        ));
+        assert!(is_esp(
+            Some("c12a7328-f81f-11d2-ba4b-00a0c93ec93b"),
+            Some("vfat")
+        ));
+    }
+
+    #[test]
+    fn mbr_efi_type_0xef_is_detected() {
+        assert!(is_esp(Some("0xef"), Some("vfat")));
+    }
+
+    #[test]
+    fn fat_data_partition_on_gpt_is_not_esp() {
+        // FAT filesystem but wrong GPT type (e.g. Microsoft Basic Data)
+        assert!(!is_esp(
+            Some("ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"),
+            Some("vfat")
+        ));
+    }
+
+    #[test]
+    fn unknown_parttype_falls_back_to_vfat_heuristic() {
+        assert!(is_esp(None, Some("vfat")));
+        assert!(!is_esp(None, Some("ext4")));
+        assert!(!is_esp(None, None));
+    }
+
+    #[cfg(feature = "alpine")]
+    #[test]
+    fn uuid_matching_from_by_uuid_links() {
+        let links = [
+            ("aaaa-1111".to_string(), "sda1".to_string()),
+            ("bbbb-2222".to_string(), "nvme0n1p2".to_string()),
+        ];
+        assert_eq!(
+            uuid_from_links("nvme0n1p2", links.iter().cloned()),
+            Some("bbbb-2222".to_string())
+        );
+        assert_eq!(uuid_from_links("sdb9", links.iter().cloned()), None);
+        assert_eq!(uuid_from_links("anything", std::iter::empty()), None);
+    }
 }

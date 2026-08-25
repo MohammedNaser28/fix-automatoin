@@ -5,7 +5,7 @@ use ratatui::{
     Frame,
     layout::Constraint,
     style::Style,
-    widgets::{Block, Cell, Row, Table},
+    widgets::{Block, Cell, Paragraph, Row, Table},
 };
 
 pub fn render(f: &mut Frame, app: &mut App) {
@@ -15,7 +15,19 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let efi_count = app.disks.iter().filter(|d| d.is_efi).count();
 
     if efi_count == 0 {
-        return; // Safe exit if no EFI paths exist yet to prevent rendering empty states
+        // Empty state - never leave the user on a blank screen with no way forward
+        let msg = vec![
+            ratatui::text::Line::from(""),
+            ratatui::text::Line::from("no EFI system partitions found").style(Style::default().fg(THEME.yellow)),
+            ratatui::text::Line::from(""),
+            ratatui::text::Line::from("[Enter] continue without EFI   [Esc] back to root selection"),
+        ];
+        let p = Paragraph::new(msg)
+            .block(Block::default().title("choose the EFI system partition (vfat, ~512MB)"))
+            .alignment(ratatui::layout::Alignment::Center)
+            .style(Style::default().bg(THEME.background));
+        f.render_widget(p, chunks[1]);
+        return;
     }
 
     // 2. Prevent state selection drift crashes

@@ -106,6 +106,14 @@ fn do_reboot() {
     }
 }
 
+fn back_from_confirm(app: &App) -> CurrentScreen {
+    if app.is_uefi {
+        CurrentScreen::SelectEfi
+    } else {
+        CurrentScreen::SelectRoot
+    }
+}
+
 fn handle_input(app: &mut App, code: KeyCode) {
     match app.current_screen {
         CurrentScreen::Welcome => match code {
@@ -128,7 +136,12 @@ fn handle_input(app: &mut App, code: KeyCode) {
                     && i < app.disks.len()
                 {
                     app.selected_root = Some(app.disks[i].clone());
-                    app.current_screen = CurrentScreen::SelectEfi;
+                    // BIOS boots have no ESP - jump straight to confirm
+                    app.current_screen = if app.is_uefi {
+                        CurrentScreen::SelectEfi
+                    } else {
+                        CurrentScreen::Confirm
+                    };
                     app.table_state.select(Some(0));
                 }
             }
@@ -176,7 +189,12 @@ fn handle_input(app: &mut App, code: KeyCode) {
                     app.table_state.select(Some(i));
                 }
                 KeyCode::Enter => {
-                    if let Some(i) = app.table_state.selected()
+                    if efi_count == 0 {
+                        // No ESP candidates - allow continuing without an EFI partition
+                        app.selected_efi = None;
+                        app.table_state.select(Some(0));
+                        app.current_screen = CurrentScreen::Confirm;
+                    } else if let Some(i) = app.table_state.selected()
                         && i < efi_count
                     {
                         app.selected_efi = Some((*efi_disks[i]).clone());
@@ -206,12 +224,12 @@ fn handle_input(app: &mut App, code: KeyCode) {
                 }
                 ConfirmFocus::Back => {
                     app.table_state.select(Some(0));
-                    app.current_screen = CurrentScreen::SelectEfi;
+                    app.current_screen = back_from_confirm(app);
                 }
             },
             KeyCode::Esc => {
                 app.table_state.select(Some(0));
-                app.current_screen = CurrentScreen::SelectEfi;
+                app.current_screen = back_from_confirm(app);
             }
             KeyCode::Char('q') => {
                 do_poweroff();

@@ -4,6 +4,17 @@ use crate::sys::blkdev::DiskInfo;
 /// All blocking system calls live here so the TUI remains responsive.
 use std::sync::mpsc::Sender;
 
+/// On failure: report the error, best-effort unmount whatever was mounted,
+/// and always emit `Done` so the ExecLog screen never hangs.
+macro_rules! fail {
+    ($tx:expr, $msg:expr) => {{
+        let _ = $tx.send(LogLine::error($msg));
+        let _ = crate::sys::mount::umount("/mnt");
+        let _ = $tx.send(LogLine::done());
+        return;
+    }};
+}
+
 pub fn run(
     tx: Sender<LogLine>,
     action: Action,
@@ -20,20 +31,26 @@ pub fn run(
     // ── Step 1: Mount root ────────────────────────────────────────────────────
     send!(LogLine::step("mounting root partition"));
     let root_dev = format!("/dev/{}", root.name);
-    crate::sys::mount::mount(&root_dev);
+    if let Err(e) = crate::sys::mount::mount(&root_dev) {
+        fail!(tx, format!("mounting {root_dev} failed: {e}"));
+    }
     send!(LogLine::ok(format!("mounted {} -> /mnt", root_dev)));
 
     // ── Step 2: Mount EFI ─────────────────────────────────────────────────────
     if is_uefi && let Some(ref efi_disk) = efi {
         send!(LogLine::step("mounting EFI partition"));
         let efi_dev = format!("/dev/{}", efi_disk.name);
-        crate::sys::mount::mount_efi(&efi_dev);
+        if let Err(e) = crate::sys::mount::mount_efi(&efi_dev) {
+            fail!(tx, format!("mounting EFI {efi_dev} failed: {e}"));
+        }
         send!(LogLine::ok(format!("mounted {} -> /mnt/boot/efi", efi_dev)));
     }
 
     // ── Step 3: Bind mounts ───────────────────────────────────────────────────
     send!(LogLine::step("bind mounting /dev /proc /sys /run"));
-    crate::sys::mount::mount_bind();
+    if let Err(e) = crate::sys::mount::mount_bind() {
+        fail!(tx, format!("bind mounts failed: {e}"));
+    }
     send!(LogLine::ok("bind mounts ready"));
 
     // ── Step 4: Detect distro ─────────────────────────────────────────────────
@@ -84,7 +101,11 @@ pub fn run(
 
     // ── Final: Unmount ────────────────────────────────────────────────────────
     send!(LogLine::step("unmounting all filesystems"));
-    crate::sys::mount::umount("/mnt");
+    if let Err(e) = crate::sys::mount::umount("/mnt") {
+        send!(LogLine::warn(format!(
+            "unmount reported an issue (may still be safe to reboot): {e}"
+        )));
+    }
     send!(LogLine::ok("repair complete - safe to reboot"));
 
     send!(LogLine::done());
@@ -139,7 +160,9 @@ pub fn run_diagnosis(
     // ── Step 1: Mount root ────────────────────────────────────────────────────
     send!(LogLine::step("mounting root partition"));
     let root_dev = format!("/dev/{}", root.name);
-    crate::sys::mount::mount(&root_dev);
+    if let Err(e) = crate::sys::mount::mount(&root_dev) {
+        fail!(tx, format!("mounting {root_dev} failed: {e}"));
+    }
     send!(LogLine::ok(format!("mounted {} -> /mnt", root_dev)));
 
     // ── Step 2: Detect distro ─────────────────────────────────────────────────
@@ -193,7 +216,9 @@ pub fn run_diagnosis(
 
     // ── Final: Analyze & Unmount ──────────────────────────────────────────────
     send!(LogLine::step("unmounting filesystems"));
-    crate::sys::mount::umount("/mnt");
+    if let Err(e) = crate::sys::mount::umount("/mnt") {
+        send!(LogLine::warn(format!("unmount warning: {e}")));
+    }
     send!(LogLine::ok("diagnosis complete"));
 
     let mut summary = Vec::new();
