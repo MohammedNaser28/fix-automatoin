@@ -136,11 +136,11 @@ mod tests {
     #[test]
     fn debian_uses_update_grub_hook_paths() {
         let d = Debian;
-        assert_eq!(d.initramfs_cmd(), vec!["update-initramfs", "-u", "-k", "all"]);
         assert_eq!(
-            d.grub_config_path(),
-            Path::new("/boot/grub/grub.cfg")
+            d.initramfs_cmd(),
+            vec!["update-initramfs", "-u", "-k", "all"]
         );
+        assert_eq!(d.grub_config_path(), Path::new("/boot/grub/grub.cfg"));
     }
 
     #[test]
@@ -156,10 +156,7 @@ mod tests {
         let d = Fedora;
         assert_eq!(d.grub_install_bin(), "grub2-install");
         assert_eq!(d.grub_mkconfig_bin(), "grub2-mkconfig");
-        assert_eq!(
-            d.grub_config_path(),
-            Path::new("/boot/grub2/grub.cfg")
-        );
+        assert_eq!(d.grub_config_path(), Path::new("/boot/grub2/grub.cfg"));
         assert_eq!(
             d.initramfs_cmd(),
             vec!["dracut", "--regenerate-all", "--force"]

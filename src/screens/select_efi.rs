@@ -18,9 +18,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
         // Empty state - never leave the user on a blank screen with no way forward
         let msg = vec![
             ratatui::text::Line::from(""),
-            ratatui::text::Line::from("no EFI system partitions found").style(Style::default().fg(THEME.yellow)),
+            ratatui::text::Line::from("no EFI system partitions found")
+                .style(Style::default().fg(THEME.yellow)),
             ratatui::text::Line::from(""),
-            ratatui::text::Line::from("[Enter] continue without EFI   [Esc] back to root selection"),
+            ratatui::text::Line::from(
+                "[Enter] continue without EFI   [Esc] back to root selection",
+            ),
         ];
         let p = Paragraph::new(msg)
             .block(Block::default().title("choose the EFI system partition (vfat, ~512MB)"))

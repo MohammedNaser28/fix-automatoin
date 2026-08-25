@@ -245,8 +245,9 @@ mod tests {
 
     #[test]
     fn declared_swap_not_flagged() {
-        let dir =
-            write_fstab("UUID=aaaa-1111  /  ext4  defaults 0 1\nUUID=bbbb-2222  none  swap  sw 0 0\n");
+        let dir = write_fstab(
+            "UUID=aaaa-1111  /  ext4  defaults 0 1\nUUID=bbbb-2222  none  swap  sw 0 0\n",
+        );
         let devs = [
             live("/dev/sda1", "aaaa-1111", "ext4", None),
             live("/dev/sda2", "bbbb-2222", "swap", None),
@@ -266,7 +267,8 @@ mod tests {
     #[test]
     fn non_device_spec_ignored() {
         // e.g. tmpfs / proc entries have no UUID= or /dev/ prefix
-        let dir = write_fstab("tmpfs  /tmp  tmpfs  defaults 0 0\nproc  /proc  proc  defaults 0 0\n");
+        let dir =
+            write_fstab("tmpfs  /tmp  tmpfs  defaults 0 0\nproc  /proc  proc  defaults 0 0\n");
         let issues = FstabAuditor::audit_fstab(dir.path(), &[]).unwrap();
         assert!(issues.is_empty());
     }

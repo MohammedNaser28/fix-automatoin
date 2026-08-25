@@ -176,10 +176,7 @@ mod tests {
     fn os_prober_noop_when_already_enabled() {
         let dir = write_default_grub("GRUB_DISABLE_OS_PROBER=false\n");
         ensure_os_prober_enabled(dir.path(), &ArchLinux).unwrap();
-        assert_eq!(
-            read_default_grub(&dir),
-            "GRUB_DISABLE_OS_PROBER=false\n"
-        );
+        assert_eq!(read_default_grub(&dir), "GRUB_DISABLE_OS_PROBER=false\n");
     }
 
     #[test]

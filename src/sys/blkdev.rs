@@ -62,7 +62,11 @@ fn get_disks_lsblk() -> Vec<DiskInfo> {
     let _ = Command::new("udevadm").args(["settle"]).output();
 
     let output = match Command::new("lsblk")
-        .args(["--json", "-o", "NAME,SIZE,FSTYPE,PARTTYPE,LABEL,UUID,MOUNTPOINT"])
+        .args([
+            "--json",
+            "-o",
+            "NAME,SIZE,FSTYPE,PARTTYPE,LABEL,UUID,MOUNTPOINT",
+        ])
         .output()
     {
         Ok(o) => o,
@@ -282,9 +286,7 @@ fn uuid_from_links<I>(name: &str, mut links: I) -> Option<String>
 where
     I: Iterator<Item = (String, String)>,
 {
-    links
-        .find(|(_, dev)| dev == name)
-        .map(|(uuid, _)| uuid)
+    links.find(|(_, dev)| dev == name).map(|(uuid, _)| uuid)
 }
 
 #[cfg(feature = "alpine")]

@@ -406,9 +406,7 @@ impl App {
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     // Sender dropped without a Done signal - the thread panicked.
                     if !done {
-                        new_lines.push(LogLine::error(
-                            "repair thread crashed before completion",
-                        ));
+                        new_lines.push(LogLine::error("repair thread crashed before completion"));
                         done = true;
                     }
                     break;
@@ -651,10 +649,7 @@ mod tests {
         app.log_rx = Some(rx);
 
         tx.send(LogLine {
-            kind: LogKind::DiagnosisResult(
-                vec!["Diagnosis: broken".into()],
-                Some(Action::FixGrub),
-            ),
+            kind: LogKind::DiagnosisResult(vec!["Diagnosis: broken".into()], Some(Action::FixGrub)),
             text: String::new(),
         })
         .unwrap();
